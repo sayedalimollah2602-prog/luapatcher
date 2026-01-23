@@ -16,8 +16,30 @@ except ImportError:
     import tkinter.ttk as ttk
     from tkinter import TOP, BOTTOM, LEFT, RIGHT, BOTH, X, Y, END
 
+def get_resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+
+    return os.path.join(base_path, relative_path)
+
 # Constants
-LUA_FILES_DIR = r"d:\antigravity\luapatcher\All Games Files"
+# If running as source, we might need to point to the folder specifically if it's not in the same dir as main.py
+# But for now, let's assume if it's source, it's relative or absolute. 
+# The user's original path was absolute: r"d:\antigravity\luapatcher\All Games Files"
+# We need to switch logic: if bundled, use embedded; if source, use original known path OR relative.
+
+if getattr(sys, 'frozen', False):
+    # Running as compiled exe
+    LUA_FILES_DIR = get_resource_path("All Games Files")
+else:
+    # Running as script
+    # We prefer the specific development path provided earlier, or relative if portable
+    LUA_FILES_DIR = r"d:\antigravity\luapatcher\All Games Files"
+
 STEAM_PLUGIN_DIR = r"C:\Program Files (x86)\Steam\config\stplug-in"
 STEAM_EXE_PATH = r"C:\Program Files (x86)\Steam\Steam.exe"
 
