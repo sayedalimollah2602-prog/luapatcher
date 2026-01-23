@@ -6,6 +6,8 @@ import tkinter as tk
 from tkinter import messagebox
 import sys
 import time
+import zipfile
+import tempfile
 
 try:
     import requests
@@ -32,13 +34,7 @@ def get_resource_path(relative_path):
 # The user's original path was absolute: r"d:\antigravity\luapatcher\All Games Files"
 # We need to switch logic: if bundled, use embedded; if source, use original known path OR relative.
 
-if getattr(sys, 'frozen', False):
-    # Running as compiled exe (bundled)
-    LUA_FILES_DIR = get_resource_path("All Games Files")
-else:
-    # Running as script (relative to script)
-    LUA_FILES_DIR = get_resource_path("All Games Files")
-
+# Constants
 STEAM_PLUGIN_DIR = r"C:\Program Files (x86)\Steam\config\stplug-in"
 STEAM_EXE_PATH = r"C:\Program Files (x86)\Steam\Steam.exe"
 
@@ -58,6 +54,60 @@ class SteamPatcherApp:
         
         # Data
         self.search_results = []
+        self.debounce_timer = None
+        self.current_search_id = 0
+        self.lua_files_dir = None
+        
+        # Start initialization
+        self.start_initialization()
+
+    def start_initialization(self):
+        self.patch_btn.config(state="disabled")
+        self.search_entry.config(state="disabled")
+        self.status_var.set("Initializing database... Please wait.")
+        
+        # Show loading indicator (indeterminate progress)
+        self.progress = ttk.Progressbar(self.root, mode='indeterminate')
+        self.progress.pack(fill=X, side=BOTTOM,pady=5)
+        self.progress.start(10)
+        
+        threading.Thread(target=self.initialize_data, daemon=True).start()
+
+    def initialize_data(self):
+        try:
+            if getattr(sys, 'frozen', False):
+                # Running as bundled exe
+                zip_path = get_resource_path("games_data.zip")
+                if os.path.exists(zip_path):
+                    # Extract to temp dir
+                    temp_dir = os.path.join(tempfile.gettempdir(), "SteamLuaPatcher_Cache")
+                    if not os.path.exists(temp_dir):
+                        os.makedirs(temp_dir)
+                    
+                    # Check if already extracted (simple check, maybe file count or marker)
+                    # For now, just extract to be safe/update
+                    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                        zip_ref.extractall(temp_dir)
+                    
+                    self.lua_files_dir = temp_dir
+                else:
+                    # Fallback or error?
+                    self.lua_files_dir = get_resource_path("All Games Files")
+            else:
+                # Running as script
+                self.lua_files_dir = get_resource_path("All Games Files")
+
+            self.root.after(0, self.on_init_complete)
+            
+        except Exception as e:
+            self.root.after(0, lambda: messagebox.showerror("Init Error", f"Failed to load data: {e}"))
+
+    def on_init_complete(self):
+        self.progress.stop()
+        self.progress.destroy()
+        self.search_entry.config(state="normal")
+        self.status_var.set("Ready to search")
+        self.search_entry.focus_set()
         self.debounce_timer = None
         self.current_search_id = 0
         
@@ -112,6 +162,10 @@ class SteamPatcherApp:
         
         self.tree.pack(fill=BOTH, expand=True, side=LEFT)
         self.tree.bind("<<TreeviewSelect>>", self.on_select)
+        
+        # Configure row colors for status
+        self.tree.tag_configure("found", foreground="#00bc8c") # Success color (Green-ish)
+        self.tree.tag_configure("missing", foreground="#e74c3c") # Danger color (Red)
         
         # Actions Section
         actions_frame = ttk.Frame(main_container)
@@ -194,8 +248,11 @@ class SteamPatcherApp:
             appid = item.get("id")
             
             # Check if lua file exists
-            lua_path = os.path.join(LUA_FILES_DIR, f"{appid}.lua")
-            exists = os.path.exists(lua_path)
+            if self.lua_files_dir:
+                lua_path = os.path.join(self.lua_files_dir, f"{appid}.lua")
+                exists = os.path.exists(lua_path)
+            else:
+                exists = False
             status = "AVAILABLE" if exists else "Missing"
             
             # Insert with tags for coloring
@@ -231,7 +288,10 @@ class SteamPatcherApp:
         name = item_values[0]
         appid = str(item_values[1])
         
-        src_file = os.path.join(LUA_FILES_DIR, f"{appid}.lua")
+        if self.lua_files_dir:
+            src_file = os.path.join(self.lua_files_dir, f"{appid}.lua")
+        else:
+            return # Should not happen if patch button is enabled
         dest_file = os.path.join(STEAM_PLUGIN_DIR, f"{appid}.lua")
         
         try:
