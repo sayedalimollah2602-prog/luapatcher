@@ -1,251 +1,689 @@
+"""
+Steam Lua Patcher - Cyberpunk Edition
+A futuristic gaming-focused UI built with PyQt6
+"""
+
 import os
 import shutil
 import subprocess
-import threading
-import tkinter as tk
-from tkinter import messagebox
 import sys
+import tempfile
 import time
 import zipfile
-import tempfile
+from typing import Optional
+
+from PyQt6.QtCore import (
+    Qt, QThread, pyqtSignal, QTimer, QPropertyAnimation, 
+    QEasingCurve, QPoint, QSize, pyqtProperty, QRect
+)
+from PyQt6.QtGui import (
+    QFont, QFontDatabase, QColor, QPainter, QPen, QBrush,
+    QLinearGradient, QRadialGradient, QPainterPath, QIcon,
+    QPalette, QPixmap
+)
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
+    QHeaderView, QMessageBox, QProgressBar, QFrame, QScrollArea,
+    QGraphicsDropShadowEffect, QSizePolicy, QAbstractItemView
+)
 
 try:
     import requests
-    import ttkbootstrap as ttk
-    from ttkbootstrap.constants import *
 except ImportError:
-    # Just in case dependencies aren't installed yet, fail gracefully or fallback
-    import tkinter.ttk as ttk
-    from tkinter import TOP, BOTTOM, LEFT, RIGHT, BOTH, X, Y, END
+    requests = None
+
 
 def get_resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller """
+    """Get absolute path to resource, works for dev and for PyInstaller"""
     try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
         base_path = sys._MEIPASS
     except Exception:
         base_path = os.path.dirname(os.path.abspath(__file__))
-
     return os.path.join(base_path, relative_path)
 
-# Constants
-# If running as source, we might need to point to the folder specifically if it's not in the same dir as main.py
-# But for now, let's assume if it's source, it's relative or absolute. 
-# The user's original path was absolute: r"d:\antigravity\luapatcher\All Games Files"
-# We need to switch logic: if bundled, use embedded; if source, use original known path OR relative.
 
-# Constants
+# ═══════════════════════════════════════════════════════════════════════════════
+# CYBERPUNK COLOR PALETTE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class CyberColors:
+    # Backgrounds
+    BG_DEEP = "#0a0a0f"
+    BG_PANEL = "#13131a"
+    BG_CARD = "#1a1a25"
+    BG_HOVER = "#252535"
+    
+    # Neon Accents
+    NEON_CYAN = "#00ffff"
+    NEON_MAGENTA = "#ff00ff"
+    NEON_YELLOW = "#ffff00"
+    NEON_GREEN = "#00ff88"
+    NEON_RED = "#ff3366"
+    NEON_ORANGE = "#ff8800"
+    NEON_BLUE = "#0088ff"
+    
+    # Text
+    TEXT_PRIMARY = "#e0e0ff"
+    TEXT_SECONDARY = "#a0a0cc"
+    TEXT_MUTED = "#6666aa"
+    
+    # Borders
+    BORDER_DARK = "#2a2a3a"
+    BORDER_GLOW = "#00ffff40"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GLOBAL STYLESHEET
+# ═══════════════════════════════════════════════════════════════════════════════
+
+CYBERPUNK_STYLESHEET = f"""
+/* ══════════════ MAIN WINDOW ══════════════ */
+QMainWindow {{
+    background-color: {CyberColors.BG_DEEP};
+}}
+
+QWidget {{
+    background-color: transparent;
+    color: {CyberColors.TEXT_PRIMARY};
+    font-family: 'Segoe UI', 'Consolas', monospace;
+}}
+
+/* ══════════════ LABELS ══════════════ */
+QLabel {{
+    color: {CyberColors.TEXT_PRIMARY};
+    background: transparent;
+}}
+
+QLabel#title {{
+    font-size: 32px;
+    font-weight: bold;
+    color: {CyberColors.NEON_CYAN};
+}}
+
+QLabel#subtitle {{
+    font-size: 12px;
+    color: {CyberColors.TEXT_MUTED};
+    letter-spacing: 3px;
+}}
+
+/* ══════════════ LINE EDIT (SEARCH) ══════════════ */
+QLineEdit {{
+    background-color: {CyberColors.BG_PANEL};
+    border: 2px solid {CyberColors.BORDER_DARK};
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 14px;
+    color: {CyberColors.TEXT_PRIMARY};
+    selection-background-color: {CyberColors.NEON_CYAN};
+    selection-color: {CyberColors.BG_DEEP};
+}}
+
+QLineEdit:focus {{
+    border: 2px solid {CyberColors.NEON_CYAN};
+    background-color: {CyberColors.BG_CARD};
+}}
+
+QLineEdit:hover {{
+    border: 2px solid {CyberColors.NEON_CYAN}80;
+}}
+
+/* ══════════════ BUTTONS ══════════════ */
+QPushButton {{
+    background-color: {CyberColors.BG_PANEL};
+    border: 2px solid {CyberColors.NEON_CYAN};
+    border-radius: 8px;
+    padding: 12px 24px;
+    font-size: 13px;
+    font-weight: bold;
+    color: {CyberColors.NEON_CYAN};
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}}
+
+QPushButton:hover {{
+    background-color: {CyberColors.NEON_CYAN}20;
+    border: 2px solid {CyberColors.NEON_CYAN};
+    color: {CyberColors.NEON_CYAN};
+}}
+
+QPushButton:pressed {{
+    background-color: {CyberColors.NEON_CYAN}40;
+}}
+
+QPushButton:disabled {{
+    background-color: {CyberColors.BG_PANEL};
+    border: 2px solid {CyberColors.BORDER_DARK};
+    color: {CyberColors.TEXT_MUTED};
+}}
+
+QPushButton#patchBtn {{
+    border-color: {CyberColors.NEON_GREEN};
+    color: {CyberColors.NEON_GREEN};
+}}
+
+QPushButton#patchBtn:hover {{
+    background-color: {CyberColors.NEON_GREEN}25;
+    border-color: {CyberColors.NEON_GREEN};
+}}
+
+QPushButton#patchBtn:disabled {{
+    border-color: {CyberColors.BORDER_DARK};
+    color: {CyberColors.TEXT_MUTED};
+}}
+
+QPushButton#restartBtn {{
+    border-color: {CyberColors.NEON_MAGENTA};
+    color: {CyberColors.NEON_MAGENTA};
+}}
+
+QPushButton#restartBtn:hover {{
+    background-color: transparent;
+    border-color: #ff88ff;
+    border-width: 3px;
+}}
+
+/* ══════════════ TABLE ══════════════ */
+QTableWidget {{
+    background-color: {CyberColors.BG_PANEL};
+    border: 2px solid {CyberColors.BORDER_DARK};
+    border-radius: 8px;
+    gridline-color: {CyberColors.BORDER_DARK};
+    outline: none;
+}}
+
+QTableWidget::item {{
+    padding: 10px;
+    border-bottom: 1px solid {CyberColors.BORDER_DARK};
+}}
+
+QTableWidget::item:selected {{
+    background-color: {CyberColors.NEON_CYAN}30;
+    color: {CyberColors.NEON_CYAN};
+}}
+
+QTableWidget::item:hover {{
+    background-color: {CyberColors.BG_HOVER};
+}}
+
+QHeaderView::section {{
+    background-color: {CyberColors.BG_CARD};
+    color: {CyberColors.NEON_CYAN};
+    padding: 12px;
+    border: none;
+    border-bottom: 2px solid {CyberColors.NEON_CYAN};
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}}
+
+/* ══════════════ SCROLLBAR ══════════════ */
+QScrollBar:vertical {{
+    background-color: {CyberColors.BG_PANEL};
+    width: 12px;
+    border-radius: 6px;
+    margin: 0;
+}}
+
+QScrollBar::handle:vertical {{
+    background-color: {CyberColors.NEON_CYAN}60;
+    border-radius: 6px;
+    min-height: 30px;
+}}
+
+QScrollBar::handle:vertical:hover {{
+    background-color: {CyberColors.NEON_CYAN};
+}}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+    height: 0;
+}}
+
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+    background: transparent;
+}}
+
+/* ══════════════ PROGRESS BAR ══════════════ */
+QProgressBar {{
+    background-color: {CyberColors.BG_PANEL};
+    border: 2px solid {CyberColors.BORDER_DARK};
+    border-radius: 8px;
+    height: 20px;
+    text-align: center;
+    color: {CyberColors.TEXT_PRIMARY};
+}}
+
+QProgressBar::chunk {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 {CyberColors.NEON_CYAN},
+        stop:0.5 {CyberColors.NEON_MAGENTA},
+        stop:1 {CyberColors.NEON_CYAN});
+    border-radius: 6px;
+}}
+
+/* ══════════════ FRAMES ══════════════ */
+QFrame#cardFrame {{
+    background-color: {CyberColors.BG_PANEL};
+    border: 1px solid {CyberColors.BORDER_DARK};
+    border-radius: 12px;
+}}
+
+QFrame#statusFrame {{
+    background-color: {CyberColors.BG_CARD};
+    border-top: 2px solid {CyberColors.NEON_CYAN}40;
+}}
+
+/* ══════════════ MESSAGE BOX ══════════════ */
+QMessageBox {{
+    background-color: {CyberColors.BG_PANEL};
+}}
+
+QMessageBox QLabel {{
+    color: {CyberColors.TEXT_PRIMARY};
+}}
+
+QMessageBox QPushButton {{
+    min-width: 80px;
+}}
+"""
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONSTANTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
 STEAM_PLUGIN_DIR = r"C:\Program Files (x86)\Steam\config\stplug-in"
 STEAM_EXE_PATH = r"C:\Program Files (x86)\Steam\Steam.exe"
 
-class SteamPatcherApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Steam Lua Patcher")
-        self.root.geometry("800x600")
-        
-        try:
-            self.root.iconbitmap(get_resource_path("logo.ico"))
-        except Exception:
-            pass # Fail silently if icon not found
-        
-        # UI Elements
-        self.create_widgets()
-        
-        # Data
-        self.search_results = []
-        self.debounce_timer = None
-        self.current_search_id = 0
-        self.lua_files_dir = None
-        
-        # Start initialization
-        self.start_initialization()
 
-    def start_initialization(self):
-        self.patch_btn.config(state="disabled")
-        self.search_entry.config(state="disabled")
-        self.status_var.set("Initializing database... Please wait.")
-        
-        # Show loading indicator (indeterminate progress)
-        self.progress = ttk.Progressbar(self.root, mode='indeterminate')
-        self.progress.pack(fill=X, side=BOTTOM,pady=5)
-        self.progress.start(10)
-        
-        threading.Thread(target=self.initialize_data, daemon=True).start()
+# ═══════════════════════════════════════════════════════════════════════════════
+# WORKER THREADS
+# ═══════════════════════════════════════════════════════════════════════════════
 
-    def initialize_data(self):
+class InitWorker(QThread):
+    """Thread for initializing the game data"""
+    finished = pyqtSignal(str)  # Emits the lua_files_dir path
+    error = pyqtSignal(str)
+    
+    def run(self):
         try:
             if getattr(sys, 'frozen', False):
-                # Running as bundled exe
                 zip_path = get_resource_path("games_data.zip")
                 if os.path.exists(zip_path):
-                    # Extract to temp dir
                     temp_dir = os.path.join(tempfile.gettempdir(), "SteamLuaPatcher_Cache")
                     if not os.path.exists(temp_dir):
                         os.makedirs(temp_dir)
-                    
-                    # Check if already extracted (simple check, maybe file count or marker)
-                    # For now, just extract to be safe/update
                     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                         zip_ref.extractall(temp_dir)
-                    
-                    self.lua_files_dir = temp_dir
+                    self.finished.emit(temp_dir)
                 else:
-                    # Fallback or error?
-                    self.lua_files_dir = get_resource_path("All Games Files")
+                    self.finished.emit(get_resource_path("All Games Files"))
             else:
-                # Running as script
-                self.lua_files_dir = get_resource_path("All Games Files")
-
-            self.root.after(0, self.on_init_complete)
-            
+                self.finished.emit(get_resource_path("All Games Files"))
         except Exception as e:
-            self.root.after(0, lambda: messagebox.showerror("Init Error", f"Failed to load data: {e}"))
+            self.error.emit(str(e))
 
-    def on_init_complete(self):
-        self.progress.stop()
-        self.progress.destroy()
-        self.search_entry.config(state="normal")
-        self.status_var.set("Ready to search")
-        self.search_entry.focus_set()
-        self.debounce_timer = None
-        self.current_search_id = 0
-        
-    def create_widgets(self):
-        # Main Container with padding
-        main_container = ttk.Frame(self.root, padding=20)
-        main_container.pack(fill=BOTH, expand=True)
-        
-        # Header
-        header_frame = ttk.Frame(main_container)
-        header_frame.pack(fill=X, pady=(0, 20))
-        
-        title_lbl = ttk.Label(header_frame, text="Steam Lua Patcher", font=("Helvetica", 24, "bold"), bootstyle="primary")
-        title_lbl.pack(side=LEFT)
-        
-        # Search Section
-        search_frame = ttk.Labelframe(main_container, text="Game Search", padding=15, bootstyle="info")
-        search_frame.pack(fill=X, pady=(0, 20))
-        
-        self.search_var = tk.StringVar()
-        self.search_var.trace_add("write", self.on_search_change)
-        
-        entry_frame = ttk.Frame(search_frame)
-        entry_frame.pack(fill=X)
-        
-        search_icon_lbl = ttk.Label(entry_frame, text="🔍", font=("Segoe UI Emoji", 12))
-        search_icon_lbl.pack(side=LEFT, padx=(0, 10))
-        
-        self.search_entry = ttk.Entry(entry_frame, textvariable=self.search_var, font=("Helvetica", 11))
-        self.search_entry.pack(side=LEFT, fill=X, expand=True)
-        self.search_entry.focus_set()
-        
-        # Results Section
-        results_frame = ttk.Labelframe(main_container, text="Search Results", padding=15, bootstyle="default")
-        results_frame.pack(fill=BOTH, expand=True, pady=(0, 20))
-        
-        columns = ("name", "appid", "status")
-        self.tree = ttk.Treeview(results_frame, columns=columns, show="headings", selectmode="browse", bootstyle="info")
-        
-        self.tree.heading("name", text="Game Name")
-        self.tree.heading("appid", text="App ID")
-        self.tree.heading("status", text="Lua Patch Status")
-        
-        self.tree.column("name", width=400, anchor="w")
-        self.tree.column("appid", width=100, anchor="center")
-        self.tree.column("status", width=150, anchor="center")
-        
-        # Scrollbar
-        scrollbar = ttk.Scrollbar(results_frame, orient="vertical", command=self.tree.yview)
-        scrollbar.pack(side=RIGHT, fill=Y)
-        self.tree.configure(yscrollcommand=scrollbar.set)
-        
-        self.tree.pack(fill=BOTH, expand=True, side=LEFT)
-        self.tree.bind("<<TreeviewSelect>>", self.on_select)
-        
-        # Configure row colors for status
-        self.tree.tag_configure("found", foreground="#00bc8c") # Success color (Green-ish)
-        self.tree.tag_configure("missing", foreground="#e74c3c") # Danger color (Red)
-        
-        # Actions Section
-        actions_frame = ttk.Frame(main_container)
-        actions_frame.pack(fill=X)
-        
-        self.patch_btn = ttk.Button(actions_frame, text="Patch Selected Game", command=self.patch_selected, state="disabled", bootstyle="success-outline", width=25)
-        self.patch_btn.pack(side=LEFT, padx=(0, 10))
-        
-        self.restart_btn = ttk.Button(actions_frame, text="Restart Steam", command=self.restart_steam, bootstyle="danger-outline", width=20)
-        self.restart_btn.pack(side=RIGHT)
 
-        # Footer / Status
-        self.status_var = tk.StringVar(value="Ready to search")
-        status_lbl = ttk.Label(self.root, textvariable=self.status_var, relief="sunken", anchor="w", padding=(10, 5), bootstyle="secondary-inverse")
-        status_lbl.pack(fill=X, side=BOTTOM)
-
-    def on_search_change(self, *args):
-        if self.debounce_timer:
-            self.root.after_cancel(self.debounce_timer)
-        self.debounce_timer = self.root.after(400, self.start_search) # Reduced debounce to 400ms
-
-    def start_search(self):
-        query = self.search_var.get().strip()
-        if not query:
-            return
-        
-        if self.debounce_timer:
-            self.root.after_cancel(self.debounce_timer)
-            self.debounce_timer = None
-            
-        self.status_var.set(f"Searching for '{query}'...")
-        
-        # Increment search ID to handle race conditions
-        self.current_search_id += 1
-        search_id = self.current_search_id
-        
-        # Clear previous results immediately if new search starts? 
-        # Optional: keeping old results until new ones arrive looks smoother.
-        # self.tree.delete(*self.tree.get_children())
-        
-        threading.Thread(target=self.search_logic, args=(query, search_id), daemon=True).start()
-
-    def search_logic(self, query, search_id):
+class SearchWorker(QThread):
+    """Thread for searching Steam games"""
+    finished = pyqtSignal(list, int)  # results, search_id
+    error = pyqtSignal(str, int)  # error message, search_id
+    
+    def __init__(self, query: str, search_id: int):
+        super().__init__()
+        self.query = query
+        self.search_id = search_id
+    
+    def run(self):
         try:
+            if requests is None:
+                self.error.emit("requests module not installed", self.search_id)
+                return
+                
             url = "https://store.steampowered.com/api/storesearch"
-            params = {
-                "term": query,
-                "l": "english",
-                "cc": "US"
-            }
+            params = {"term": self.query, "l": "english", "cc": "US"}
             response = requests.get(url, params=params, timeout=10)
             response.raise_for_status()
             data = response.json()
-            
             items = data.get("items", [])
-            
-            # Check if this thread is still relevant
-            if search_id == self.current_search_id:
-                self.root.after(0, self.update_results, items)
-            else:
-                print(f"Ignoring stale search result (ID: {search_id})")
-            
-        except requests.RequestException as e:
-             if search_id == self.current_search_id:
-                self.root.after(0, lambda: self.status_var.set(f"Network Error: {e}"))
+            self.finished.emit(items, self.search_id)
         except Exception as e:
-             if search_id == self.current_search_id:
-                self.root.after(0, lambda: self.status_var.set(f"Error: {e}"))
+            self.error.emit(str(e), self.search_id)
 
-    def update_results(self, items):
-        self.tree.delete(*self.tree.get_children())
+
+class RestartWorker(QThread):
+    """Thread for restarting Steam"""
+    finished = pyqtSignal(str)
+    error = pyqtSignal(str)
+    
+    def run(self):
+        try:
+            subprocess.run("taskkill /F /IM steam.exe", shell=True, 
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(2)
+            
+            if os.path.exists(STEAM_EXE_PATH):
+                subprocess.Popen([STEAM_EXE_PATH])
+                self.finished.emit("Steam restarted successfully!")
+            else:
+                subprocess.run("start steam://open/main", shell=True)
+                self.finished.emit("Steam restart command sent.")
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CUSTOM WIDGETS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class GlowingLabel(QLabel):
+    """Label with neon glow effect"""
+    def __init__(self, text: str, color: str = CyberColors.NEON_CYAN, parent=None):
+        super().__init__(text, parent)
+        self.glow_color = color
+        self._setup_glow()
+    
+    def _setup_glow(self):
+        glow = QGraphicsDropShadowEffect(self)
+        glow.setBlurRadius(20)
+        glow.setColor(QColor(self.glow_color))
+        glow.setOffset(0, 0)
+        self.setGraphicsEffect(glow)
+
+
+class CyberButton(QPushButton):
+    """Button with animated glow effect"""
+    def __init__(self, text: str, color: str = CyberColors.NEON_CYAN, parent=None):
+        super().__init__(text, parent)
+        self.base_color = color
+        self._glow_intensity = 15
+        self._setup_glow()
+    
+    def _setup_glow(self):
+        self.glow = QGraphicsDropShadowEffect(self)
+        self.glow.setBlurRadius(self._glow_intensity)
+        self.glow.setColor(QColor(self.base_color))
+        self.glow.setOffset(0, 0)
+        self.setGraphicsEffect(self.glow)
+    
+    def enterEvent(self, event):
+        self.glow.setBlurRadius(30)
+        super().enterEvent(event)
+    
+    def leaveEvent(self, event):
+        self.glow.setBlurRadius(15)
+        super().leaveEvent(event)
+
+
+class NeonDivider(QFrame):
+    """Horizontal divider with neon glow"""
+    def __init__(self, color: str = CyberColors.NEON_CYAN, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(2)
+        self.setStyleSheet(f"""
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 transparent,
+                stop:0.2 {color},
+                stop:0.8 {color},
+                stop:1 transparent);
+        """)
+        
+        glow = QGraphicsDropShadowEffect(self)
+        glow.setBlurRadius(10)
+        glow.setColor(QColor(color))
+        glow.setOffset(0, 0)
+        self.setGraphicsEffect(glow)
+
+
+class PulsingProgress(QProgressBar):
+    """Progress bar with pulsing animation for indeterminate state"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setTextVisible(False)
+        self.setMinimum(0)
+        self.setMaximum(0)  # Indeterminate
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MAIN APPLICATION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class SteamPatcherApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("⚡ STEAM LUA PATCHER // CYBERPUNK EDITION")
+        self.setFixedSize(600, 700)
+        
+        # Set window icon
+        try:
+            self.setWindowIcon(QIcon(get_resource_path("logo.ico")))
+        except:
+            pass
+        
+        # Data
+        self.lua_files_dir: Optional[str] = None
+        self.search_results = []
+        self.current_search_id = 0
+        self.debounce_timer = QTimer()
+        self.debounce_timer.setSingleShot(True)
+        self.debounce_timer.timeout.connect(self.start_search)
+        self.search_worker: Optional[SearchWorker] = None
+        
+        # Setup UI
+        self._setup_ui()
+        
+        # Start initialization
+        self._start_initialization()
+    
+    def _setup_ui(self):
+        """Create all UI components"""
+        # Central widget
+        central = QWidget()
+        self.setCentralWidget(central)
+        
+        # Main layout
+        main_layout = QVBoxLayout(central)
+        main_layout.setContentsMargins(30, 30, 30, 20)
+        main_layout.setSpacing(20)
+        
+        # ═══════════ HEADER ═══════════
+        header_layout = QVBoxLayout()
+        header_layout.setSpacing(5)
+        
+        # Title with glow
+        self.title_label = GlowingLabel("STEAM LUA PATCHER", CyberColors.NEON_CYAN)
+        self.title_label.setObjectName("title")
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header_layout.addWidget(self.title_label)
+        
+        # Subtitle
+        subtitle = QLabel("// CYBERPUNK EDITION v2.0")
+        subtitle.setObjectName("subtitle")
+        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header_layout.addWidget(subtitle)
+        
+        # Neon divider
+        header_layout.addWidget(NeonDivider())
+        
+        main_layout.addLayout(header_layout)
+        
+        # ═══════════ SEARCH SECTION ═══════════
+        search_frame = QFrame()
+        search_frame.setObjectName("cardFrame")
+        search_layout = QVBoxLayout(search_frame)
+        search_layout.setContentsMargins(20, 15, 20, 15)
+        
+        search_header = QLabel("🔍 GAME SEARCH")
+        search_header.setStyleSheet(f"""
+            font-size: 12px;
+            font-weight: bold;
+            color: {CyberColors.NEON_CYAN};
+            letter-spacing: 2px;
+            margin-bottom: 5px;
+        """)
+        search_layout.addWidget(search_header)
+        
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Enter game name to search Steam database...")
+        self.search_input.textChanged.connect(self.on_search_change)
+        self.search_input.setEnabled(False)
+        search_layout.addWidget(self.search_input)
+        
+        main_layout.addWidget(search_frame)
+        
+        # ═══════════ RESULTS TABLE ═══════════
+        results_frame = QFrame()
+        results_frame.setObjectName("cardFrame")
+        results_layout = QVBoxLayout(results_frame)
+        results_layout.setContentsMargins(20, 15, 20, 15)
+        
+        results_header = QLabel("📋 SEARCH RESULTS")
+        results_header.setStyleSheet(f"""
+            font-size: 12px;
+            font-weight: bold;
+            color: {CyberColors.NEON_CYAN};
+            letter-spacing: 2px;
+            margin-bottom: 5px;
+        """)
+        results_layout.addWidget(results_header)
+        
+        self.table = QTableWidget()
+        self.table.setColumnCount(3)
+        self.table.setHorizontalHeaderLabels(["GAME NAME", "APP ID", "STATUS"])
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(1, 80)
+        self.table.setColumnWidth(2, 120)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setShowGrid(False)
+        self.table.setWordWrap(True)  # Enable word wrap for long names
+        self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self.table.itemSelectionChanged.connect(self.on_selection_change)
+        results_layout.addWidget(self.table)
+        
+        main_layout.addWidget(results_frame, 1)  # stretch
+        
+        # ═══════════ ACTION BUTTONS ═══════════
+        actions_layout = QHBoxLayout()
+        actions_layout.setSpacing(15)
+        
+        self.patch_btn = CyberButton("⚡ PATCH SELECTED GAME", CyberColors.NEON_GREEN)
+        self.patch_btn.setObjectName("patchBtn")
+        self.patch_btn.setEnabled(False)
+        self.patch_btn.clicked.connect(self.patch_selected)
+        self.patch_btn.setMinimumHeight(50)
+        actions_layout.addWidget(self.patch_btn)
+        
+        self.restart_btn = CyberButton("🔄 RESTART STEAM", CyberColors.NEON_MAGENTA)
+        self.restart_btn.setObjectName("restartBtn")
+        self.restart_btn.clicked.connect(self.restart_steam)
+        self.restart_btn.setMinimumHeight(50)
+        actions_layout.addWidget(self.restart_btn)
+        
+        main_layout.addLayout(actions_layout)
+        
+        # ═══════════ STATUS BAR ═══════════
+        status_frame = QFrame()
+        status_frame.setObjectName("statusFrame")
+        status_frame.setFixedHeight(40)
+        status_layout = QHBoxLayout(status_frame)
+        status_layout.setContentsMargins(15, 5, 15, 5)
+        
+        self.status_indicator = QLabel("●")
+        self.status_indicator.setStyleSheet(f"color: {CyberColors.NEON_CYAN}; font-size: 10px;")
+        status_layout.addWidget(self.status_indicator)
+        
+        self.status_label = QLabel("INITIALIZING SYSTEM...")
+        self.status_label.setStyleSheet(f"""
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+            color: {CyberColors.TEXT_SECONDARY};
+            letter-spacing: 1px;
+        """)
+        status_layout.addWidget(self.status_label)
+        status_layout.addStretch()
+        
+        main_layout.addWidget(status_frame)
+        
+        # Progress bar (hidden initially)
+        self.progress = PulsingProgress()
+        self.progress.setFixedHeight(4)
+        self.progress.hide()
+        main_layout.addWidget(self.progress)
+    
+    def _start_initialization(self):
+        """Start loading game data in background"""
+        self.progress.show()
+        self.set_status("LOADING DATABASE...", CyberColors.NEON_YELLOW)
+        
+        self.init_worker = InitWorker()
+        self.init_worker.finished.connect(self._on_init_complete)
+        self.init_worker.error.connect(self._on_init_error)
+        self.init_worker.start()
+    
+    def _on_init_complete(self, lua_dir: str):
+        """Called when initialization is complete"""
+        self.lua_files_dir = lua_dir
+        self.progress.hide()
+        self.search_input.setEnabled(True)
+        self.search_input.setFocus()
+        self.set_status("SYSTEM READY // ENTER GAME NAME TO SEARCH", CyberColors.NEON_GREEN)
+    
+    def _on_init_error(self, error: str):
+        """Called when initialization fails"""
+        self.progress.hide()
+        self.set_status(f"INIT ERROR: {error}", CyberColors.NEON_RED)
+        QMessageBox.critical(self, "Initialization Error", f"Failed to load game data:\n{error}")
+    
+    def set_status(self, message: str, color: str = CyberColors.NEON_CYAN):
+        """Update status bar"""
+        self.status_label.setText(message)
+        self.status_indicator.setStyleSheet(f"color: {color}; font-size: 10px;")
+    
+    def on_search_change(self, text: str):
+        """Handle search input changes with debouncing"""
+        self.debounce_timer.stop()
+        if text.strip():
+            self.debounce_timer.start(400)  # 400ms debounce
+    
+    def start_search(self):
+        """Execute the search"""
+        query = self.search_input.text().strip()
+        if not query:
+            return
+        
+        self.current_search_id += 1
+        search_id = self.current_search_id
+        
+        self.set_status(f"SEARCHING: '{query.upper()}'...", CyberColors.NEON_YELLOW)
+        
+        # Cancel previous search if running
+        if self.search_worker and self.search_worker.isRunning():
+            self.search_worker.terminate()
+        
+        self.search_worker = SearchWorker(query, search_id)
+        self.search_worker.finished.connect(self._on_search_complete)
+        self.search_worker.error.connect(self._on_search_error)
+        self.search_worker.start()
+    
+    def _on_search_complete(self, items: list, search_id: int):
+        """Handle search results"""
+        if search_id != self.current_search_id:
+            return  # Stale result
+        
+        self.table.setRowCount(0)
         self.search_results = items
         
         if not items:
-            self.status_var.set("No results found.")
+            self.set_status("NO RESULTS FOUND", CyberColors.NEON_ORANGE)
             return
-
+        
         for item in items:
-            name = item.get("name")
-            appid = item.get("id")
+            name = item.get("name", "Unknown")
+            appid = str(item.get("id", ""))
             
             # Check if lua file exists
             if self.lua_files_dir:
@@ -253,87 +691,149 @@ class SteamPatcherApp:
                 exists = os.path.exists(lua_path)
             else:
                 exists = False
-            status = "AVAILABLE" if exists else "Missing"
             
-            # Insert with tags for coloring
-            # We need to map boolean to a tag if using ttkbootstrap specific row colors, 
-            # but simpler to just use text for now or configure tags.
-            self.tree.insert("", "end", values=(name, appid, status), tags=("found" if exists else "missing",))
+            status = "✓ AVAILABLE" if exists else "✗ MISSING"
+            status_color = CyberColors.NEON_GREEN if exists else CyberColors.NEON_RED
+            
+            row = self.table.rowCount()
+            self.table.insertRow(row)
+            
+            # Name - with word wrap and tooltip for long names
+            name_item = QTableWidgetItem(name)
+            name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            name_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter | Qt.TextFlag.TextWordWrap)
+            name_item.setToolTip(name)  # Show full name on hover
+            self.table.setItem(row, 0, name_item)
+            
+            # App ID
+            appid_item = QTableWidgetItem(appid)
+            appid_item.setFlags(appid_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            appid_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.table.setItem(row, 1, appid_item)
+            
+            # Status
+            status_item = QTableWidgetItem(status)
+            status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            status_item.setForeground(QColor(status_color))
+            self.table.setItem(row, 2, status_item)
         
-        # Configure tag colors (if standard ttk, bootstyle handles defaults differently)
-        # self.tree.tag_configure("found", foreground="green") # bootstyle might override
-        
-        self.status_var.set(f"Found {len(items)} results.")
-        
-    def on_select(self, event):
-        selected = self.tree.selection()
+        # Resize rows to fit content
+        self.table.resizeRowsToContents()
+        self.set_status(f"FOUND {len(items)} RESULTS", CyberColors.NEON_GREEN)
+    
+    def _on_search_error(self, error: str, search_id: int):
+        """Handle search error"""
+        if search_id != self.current_search_id:
+            return
+        self.set_status(f"NETWORK ERROR: {error}", CyberColors.NEON_RED)
+    
+    def on_selection_change(self):
+        """Handle table selection changes"""
+        selected = self.table.selectedItems()
         if selected:
-            item_values = self.tree.item(selected[0])['values']
-            status = item_values[2] # "AVAILABLE" or "Missing"
-            if status == "AVAILABLE":
-                self.patch_btn.config(state="normal")
-                self.status_var.set(f"Selected: {item_values[0]}")
+            row = selected[0].row()
+            status_item = self.table.item(row, 2)
+            name_item = self.table.item(row, 0)
+            
+            if status_item and "AVAILABLE" in status_item.text():
+                self.patch_btn.setEnabled(True)
+                self.set_status(f"SELECTED: {name_item.text().upper()}", CyberColors.NEON_CYAN)
             else:
-                self.patch_btn.config(state="disabled")
-                self.status_var.set(f"Lua file missing for: {item_values[0]}")
+                self.patch_btn.setEnabled(False)
+                self.set_status(f"LUA PATCH MISSING FOR: {name_item.text().upper()}", CyberColors.NEON_ORANGE)
         else:
-             self.patch_btn.config(state="disabled")
-
+            self.patch_btn.setEnabled(False)
+    
     def patch_selected(self):
-        selected = self.tree.selection()
+        """Copy the lua file to Steam plugin directory"""
+        selected = self.table.selectedItems()
         if not selected:
             return
         
-        item_values = self.tree.item(selected[0])['values']
-        name = item_values[0]
-        appid = str(item_values[1])
+        row = selected[0].row()
+        name = self.table.item(row, 0).text()
+        appid = self.table.item(row, 1).text()
         
-        if self.lua_files_dir:
-            src_file = os.path.join(self.lua_files_dir, f"{appid}.lua")
-        else:
-            return # Should not happen if patch button is enabled
+        if not self.lua_files_dir:
+            return
+        
+        src_file = os.path.join(self.lua_files_dir, f"{appid}.lua")
         dest_file = os.path.join(STEAM_PLUGIN_DIR, f"{appid}.lua")
         
         try:
             if not os.path.exists(STEAM_PLUGIN_DIR):
                 os.makedirs(STEAM_PLUGIN_DIR)
-                
-            shutil.copy2(src_file, dest_file)
-            messagebox.showinfo("Success", f"Patched '{name}' successfully!", parent=self.root)
-            self.status_var.set(f"Successfully patched {name}")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to copy file: {e}", parent=self.root)
-
-    def restart_steam(self):
-        if not messagebox.askyesno("Confirm Restart", "This will close Steam and all running games. Continue?", parent=self.root):
-            return
             
-        self.status_var.set("Restarting Steam...")
+            shutil.copy2(src_file, dest_file)
+            
+            QMessageBox.information(
+                self, 
+                "⚡ PATCH SUCCESSFUL",
+                f"Successfully patched:\n\n🎮 {name}\n📁 App ID: {appid}"
+            )
+            self.set_status(f"PATCHED: {name.upper()}", CyberColors.NEON_GREEN)
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "❌ PATCH FAILED",
+                f"Failed to copy lua file:\n\n{str(e)}"
+            )
+            self.set_status(f"PATCH FAILED: {str(e)}", CyberColors.NEON_RED)
+    
+    def restart_steam(self):
+        """Restart Steam application"""
+        reply = QMessageBox.question(
+            self,
+            "🔄 CONFIRM RESTART",
+            "This will close Steam and all running games.\n\nContinue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
         
-        def restart_thread():
-            try:
-                # Taskkill is reliable
-                subprocess.run("taskkill /F /IM steam.exe", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                time.sleep(2)
-                
-                if os.path.exists(STEAM_EXE_PATH):
-                    subprocess.Popen([STEAM_EXE_PATH])
-                    self.root.after(0, lambda: self.status_var.set("Steam restarted."))
-                else:
-                    subprocess.run("start steam://open/main", shell=True)
-                    self.root.after(0, lambda: self.status_var.set("Steam restart command sent."))
-                    
-            except Exception as e:
-                self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to restart Steam: {e}", parent=self.root))
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        self.set_status("RESTARTING STEAM...", CyberColors.NEON_MAGENTA)
+        
+        self.restart_worker = RestartWorker()
+        self.restart_worker.finished.connect(
+            lambda msg: self.set_status(msg, CyberColors.NEON_GREEN)
+        )
+        self.restart_worker.error.connect(
+            lambda err: (
+                self.set_status(f"ERROR: {err}", CyberColors.NEON_RED),
+                QMessageBox.critical(self, "Error", f"Failed to restart Steam:\n{err}")
+            )
+        )
+        self.restart_worker.start()
 
-        threading.Thread(target=restart_thread, daemon=True).start()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ENTRY POINT
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def main():
+    # High DPI support
+    if hasattr(Qt, 'AA_EnableHighDpiScaling'):
+        QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
+    if hasattr(Qt, 'AA_UseHighDpiPixmaps'):
+        QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
+    
+    app = QApplication(sys.argv)
+    app.setStyle('Fusion')  # Consistent cross-platform look
+    app.setStyleSheet(CYBERPUNK_STYLESHEET)
+    
+    # Set application font
+    font = QFont("Segoe UI", 10)
+    app.setFont(font)
+    
+    window = SteamPatcherApp()
+    window.show()
+    
+    sys.exit(app.exec())
+
 
 if __name__ == "__main__":
-    # Theme setup
-    try:
-        root = ttk.Window(themename="darkly") # modern dark theme
-    except NameError:
-        root = tk.Tk()
-        
-    app = SteamPatcherApp(root)
-    root.mainloop()
+    main()
