@@ -48,6 +48,11 @@ class SteamPatcherApp:
         self.root.title("Steam Lua Patcher")
         self.root.geometry("800x600")
         
+        try:
+            self.root.iconbitmap(get_resource_path("logo.ico"))
+        except Exception:
+            pass # Fail silently if icon not found
+        
         # UI Elements
         self.create_widgets()
         

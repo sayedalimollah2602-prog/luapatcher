@@ -18,7 +18,8 @@ PyInstaller.__main__.run([
     '--clean',
     '--collect-all=ttkbootstrap',  # Important for themes
     '--add-data=All Games Files;All Games Files', # Format: "source;dest" (Windows)
-    '--icon=NONE' # You could add an icon here if available
+    '--add-data=logo.ico;.', # Bundle icon for runtime use
+    '--icon=logo.ico' # Set EXE file icon
 ])
 
 print("Build complete. Executable is in 'dist' folder.")
