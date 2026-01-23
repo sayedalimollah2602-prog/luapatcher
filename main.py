@@ -33,12 +33,16 @@ class SteamPatcherApp:
         search_frame.pack(fill="x", padx=10, pady=5)
         
         self.search_var = tk.StringVar()
+        self.search_var.trace_add("write", self.on_search_change)
         self.search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
         self.search_entry.pack(side="left", fill="x", expand=True, padx=5)
-        self.search_entry.bind("<Return>", lambda e: self.start_search())
+        # self.search_entry.bind("<Return>", lambda e: self.start_search()) # Enter key still works but not strictly needed with auto-search
         
         search_btn = ttk.Button(search_frame, text="Search", command=self.start_search)
         search_btn.pack(side="right", padx=5)
+        
+        # Debounce timer
+        self.debounce_timer = None
         
         # Results Frame
         results_frame = ttk.LabelFrame(self.root, text="Results", padding=(10, 10))
@@ -75,10 +79,20 @@ class SteamPatcherApp:
         status_bar = ttk.Label(self.root, textvariable=self.status_var, relief="sunken", anchor="w")
         status_bar.pack(fill="x", side="bottom")
 
+    def on_search_change(self, *args):
+        if self.debounce_timer:
+            self.root.after_cancel(self.debounce_timer)
+        self.debounce_timer = self.root.after(600, self.start_search)
+
     def start_search(self):
         query = self.search_var.get().strip()
         if not query:
             return
+        
+        # Debounce cleanup if called manually
+        if self.debounce_timer:
+            self.root.after_cancel(self.debounce_timer)
+            self.debounce_timer = None
         
         self.patch_btn.config(state="disabled")
         self.status_var.set("Searching...")
