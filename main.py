@@ -33,12 +33,11 @@ def get_resource_path(relative_path):
 # We need to switch logic: if bundled, use embedded; if source, use original known path OR relative.
 
 if getattr(sys, 'frozen', False):
-    # Running as compiled exe
+    # Running as compiled exe (bundled)
     LUA_FILES_DIR = get_resource_path("All Games Files")
 else:
-    # Running as script
-    # We prefer the specific development path provided earlier, or relative if portable
-    LUA_FILES_DIR = r"d:\antigravity\luapatcher\All Games Files"
+    # Running as script (relative to script)
+    LUA_FILES_DIR = get_resource_path("All Games Files")
 
 STEAM_PLUGIN_DIR = r"C:\Program Files (x86)\Steam\config\stplug-in"
 STEAM_EXE_PATH = r"C:\Program Files (x86)\Steam\Steam.exe"
