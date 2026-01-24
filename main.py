@@ -42,7 +42,7 @@ def get_resource_path(relative_path):
 # CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
-APP_VERSION = "1.0"
+APP_VERSION = "1.0-beta"
 WEBSERVER_BASE_URL = "https://webserver-ecru.vercel.app"
 GAMES_INDEX_URL = f"{WEBSERVER_BASE_URL}/api/games_index.json"
 LUA_FILE_URL = f"{WEBSERVER_BASE_URL}/lua/"
@@ -507,9 +507,16 @@ class SteamPatcherApp(QMainWindow):
         
         # Version Label
         version_label = QLabel(f"v{APP_VERSION}")
-        version_label.setStyleSheet(f"color: {Colors.GLASS_BORDER}; font-size: 12px; font-weight: bold;")
+        version_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; font-size: 12px; font-weight: bold;")
         version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_col.addWidget(version_label)
+        
+        # Creator Footer
+        creator_label = QLabel('<a href="https://github.com/sayedalimollah2602-prog" style="color: #94A3B8; text-decoration: none;">created by leVI</a>')
+        creator_label.setStyleSheet(f"font-size: 11px;")
+        creator_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        creator_label.setOpenExternalLinks(True)
+        left_col.addWidget(creator_label)
         
         main_layout.addLayout(left_col, 35) # 35% width
         
