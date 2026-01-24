@@ -1,0 +1,89 @@
+#include "indexdownloadworker.h"
+#include "../config.h"
+#include "../utils/paths.h"
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QEventLoop>
+#include <QTimer>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QFile>
+#include <QDir>
+
+IndexDownloadWorker::IndexDownloadWorker(QObject* parent)
+    : QThread(parent)
+{
+}
+
+void IndexDownloadWorker::run() {
+    try {
+        emit progress("Connecting...");
+        
+        QString cacheDir = Paths::getLocalCacheDir();
+        QDir dir;
+        dir.mkpath(cacheDir);
+        
+        QString indexPath = Paths::getLocalIndexPath();
+        QJsonObject indexData;
+        
+        // Try to download
+        emit progress("Syncing library...");
+        
+        QNetworkAccessManager manager;
+        QNetworkRequest request(QUrl(Config::GAMES_INDEX_URL));
+        request.setHeader(QNetworkRequest::UserAgentHeader, "SteamLuaPatcher/2.0");
+        
+        QEventLoop loop;
+        QNetworkReply* reply = manager.get(request);
+        connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+        
+        QTimer timer;
+        timer.setSingleShot(true);
+        connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
+        timer.start(30000); // 30 second timeout
+        
+        loop.exec();
+        
+        if (reply->error() == QNetworkReply::NoError && timer.isActive()) {
+            // Download successful
+            QByteArray data = reply->readAll();
+            QJsonDocument doc = QJsonDocument::fromJson(data);
+            indexData = doc.object();
+            
+            // Save to cache
+            QFile file(indexPath);
+            if (file.open(QIODevice::WriteOnly)) {
+                file.write(doc.toJson());
+                file.close();
+            }
+        } else {
+            // Network error, try cache
+            emit progress("Offline mode...");
+            QFile file(indexPath);
+            if (file.open(QIODevice::ReadOnly)) {
+                QByteArray data = file.readAll();
+                QJsonDocument doc = QJsonDocument::fromJson(data);
+                indexData = doc.object();
+                file.close();
+            } else {
+                throw std::runtime_error("Network error & no cache");
+            }
+        }
+        
+        reply->deleteLater();
+        
+        // Extract app IDs
+        QSet<QString> appIds;
+        QJsonArray arr = indexData["app_ids"].toArray();
+        for (const QJsonValue& val : arr) {
+            appIds.insert(val.toString());
+        }
+        
+        emit finished(appIds);
+        
+    } catch (const std::exception& e) {
+        emit error(QString::fromStdString(e.what()));
+    }
+}

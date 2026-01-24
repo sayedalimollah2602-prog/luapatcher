@@ -3,13 +3,24 @@ name: Release Build
 on:
   push:
     branches: [ "main", "master" ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 1.0.0)'
+        required: true
+        type: string
+      changelog:
+        description: 'Changelog/Release notes (use " - " to separate items)'
+        required: false
+        type: string
+        default: 'Manual release'
 
 permissions:
   contents: write
 
 jobs:
   build-and-release:
-    if: contains(github.event.head_commit.message, 'release:')
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, 'release:')
     runs-on: windows-latest
 
     steps:
@@ -17,63 +28,119 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
       with:
-        python-version: '3.13'
-        cache: 'pip'
+        version: '6.6.0'
+        host: 'windows'
+        target: 'desktop'
+        arch: 'win64_mingw'
+        modules: 'qtnetworkauth'
+        cache: true
 
-    - name: Install dependencies
+    - name: Setup MinGW
       run: |
-        python -m pip install --upgrade pip
-        if (Test-Path requirements.txt) { pip install -r requirements.txt }
-        # Ensure PyInstaller is installed if not in requirements (it should be)
-        pip install pyinstaller
+        choco install mingw --version=11.2.0.07112021 --force -y
+        echo "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      shell: pwsh
 
-    - name: Build with PyInstaller
+    - name: Setup CMake
+      uses: jwlawson/actions-setup-cmake@v1.14
+      with:
+        cmake-version: '3.27.x'
+
+    - name: Configure CMake
       run: |
-        python build.py
+        mkdir build
+        cd build
+        cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release ..
+      shell: cmd
+
+    - name: Build
+      run: |
+        cd build
+        cmake --build . --config Release
+      shell: cmd
+
+    - name: Create Distribution Package
+      run: |
+        mkdir dist
+        copy build\SteamLuaPatcher.exe dist\
+        if exist logo.ico copy logo.ico dist\
+        cd dist
+        windeployqt SteamLuaPatcher.exe --release --no-translations
+      shell: cmd
+
+    - name: Create Installer (Optional - using NSIS)
+      run: |
+        echo "Skipping installer creation - direct exe distribution"
+      shell: cmd
+
+    - name: Package Release
+      run: |
+        cd dist
+        7z a ..\SteamLuaPatcher-Windows.zip *
+      shell: cmd
 
     - name: Extract Version from Commit Message
       id: get_info
       shell: pwsh
       run: |
-        $msg = "${{ github.event.head_commit.message }}"
-        # Regex to find "release: <version>" (case insensitive)
-        if ($msg -match "(?i)release:\s*v?([\d\.]+)") {
-            $version = $matches[1]
+        # Check if this is a manual trigger
+        if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $version = "${{ github.event.inputs.version }}"
             echo "VERSION=$version" >> $env:GITHUB_OUTPUT
-            echo "Found version: $version"
+            echo "Manual trigger - Version: $version"
         } else {
-            echo "VERSION=latest" >> $env:GITHUB_OUTPUT
-            echo "No specific version found, using 'latest'"
+            # Extract from commit message
+            $msg = "${{ github.event.head_commit.message }}"
+            if ($msg -match "(?i)release:\s*v?([\d\.]+)") {
+                $version = $matches[1]
+                echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+                echo "Commit trigger - Found version: $version"
+            } else {
+                echo "VERSION=latest" >> $env:GITHUB_OUTPUT
+                echo "No specific version found, using 'latest'"
+            }
         }
 
     - name: Generate Changelog
       id: changelog
       shell: pwsh
       run: |
-        $msg = "${{ github.event.head_commit.message }}"
-        
-        # Split by " - " which the user uses as separator
-        # using -split with Regex escape might be safer, but simple string split works for " - "
-        $parts = $msg -split " - "
-        
-        $changelog = ""
-        foreach ($part in $parts) {
-            # Skip the "release:" part if it's the first one, or just clean it up
-            if ($part -match "^release:") { continue }
-            
-            # Format as list item
-            $changelog += "- $part`n"
+        # Check if this is a manual trigger
+        if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $changelog = "${{ github.event.inputs.changelog }}"
+            if ($changelog) {
+                # Split by " - " if multiple items
+                $parts = $changelog -split " - "
+                $formattedLog = ""
+                foreach ($part in $parts) {
+                    $part = $part.Trim()
+                    if ($part) {
+                        $formattedLog += "- $part`n"
+                    }
+                }
+                $changelog = $formattedLog
+            } else {
+                $changelog = "- Manual release"
+            }
+            echo "Manual trigger changelog"
+        } else {
+            # Extract from commit message
+            $msg = "${{ github.event.head_commit.message }}"
+            $parts = $msg -split " - "
+            $changelog = ""
+            foreach ($part in $parts) {
+                if ($part -match "^release:") { continue }
+                $changelog += "- $part`n"
+            }
+            if (-not $changelog) {
+                $changelog = $msg
+            }
         }
         
-        if (-not $changelog) {
-            # Fallback if split didn't find " - "
-            $changelog = $msg
-        }
-
-        # Escape newlines for GitHub Actions output
+        # Escape for GitHub Actions output
         $changelog = $changelog -replace '%', '%25' -replace '\n', '%0A' -replace '\r', '%0D'
         echo "LOGS=$changelog" >> $env:GITHUB_OUTPUT
 
@@ -85,7 +152,17 @@ jobs:
         body: |
           ## Changes
           ${{ steps.changelog.outputs.LOGS }}
+          
+          ## Installation
+          1. Download `SteamLuaPatcher-Windows.zip`
+          2. Extract the archive
+          3. Run `SteamLuaPatcher.exe`
+          
+          ## Requirements
+          - Windows 10/11
+          - Visual C++ Redistributable (usually pre-installed)
         files: |
+          SteamLuaPatcher-Windows.zip
           dist/SteamLuaPatcher.exe
         draft: false
         prerelease: false
