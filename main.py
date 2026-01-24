@@ -42,6 +42,7 @@ def get_resource_path(relative_path):
 # CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
+APP_VERSION = "2.1.0"
 WEBSERVER_BASE_URL = "https://webserver-ecru.vercel.app"
 GAMES_INDEX_URL = f"{WEBSERVER_BASE_URL}/api/games_index.json"
 LUA_FILE_URL = f"{WEBSERVER_BASE_URL}/lua/"
@@ -501,6 +502,14 @@ class SteamPatcherApp(QMainWindow):
         self.btn_restart = GlassButton("↻", "Restart Steam", "Apply changes by restarting Steam", Colors.ACCENT_PURPLE)
         self.btn_restart.clicked.connect(self.do_restart)
         left_col.addWidget(self.btn_restart)
+        
+        left_col.addStretch()
+        
+        # Version Label
+        version_label = QLabel(f"v{APP_VERSION}")
+        version_label.setStyleSheet(f"color: {Colors.GLASS_BORDER}; font-size: 12px; font-weight: bold;")
+        version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        left_col.addWidget(version_label)
         
         main_layout.addLayout(left_col, 35) # 35% width
         
