@@ -53,23 +53,29 @@ jobs:
       id: changelog
       shell: pwsh
       run: |
-        try {
-            $lastTag = git describe --tags --abbrev=0 2>$null
-        } catch {
-            $lastTag = $null
-        }
-
-        if ($lastTag) {
-            echo "Generating changelog since $lastTag"
-            $logs = git log "$lastTag..HEAD" --pretty=format:"- %s (%h)"
-        } else {
-            echo "Generatine initial changelog"
-            $logs = git log --pretty=format:"- %s (%h)"
+        $msg = "${{ github.event.head_commit.message }}"
+        
+        # Split by " - " which the user uses as separator
+        # using -split with Regex escape might be safer, but simple string split works for " - "
+        $parts = $msg -split " - "
+        
+        $changelog = ""
+        foreach ($part in $parts) {
+            # Skip the "release:" part if it's the first one, or just clean it up
+            if ($part -match "^release:") { continue }
+            
+            # Format as list item
+            $changelog += "- $part`n"
         }
         
+        if (-not $changelog) {
+            # Fallback if split didn't find " - "
+            $changelog = $msg
+        }
+
         # Escape newlines for GitHub Actions output
-        $logs = $logs -replace '%', '%25' -replace '\n', '%0A' -replace '\r', '%0D'
-        echo "LOGS=$logs" >> $env:GITHUB_OUTPUT
+        $changelog = $changelog -replace '%', '%25' -replace '\n', '%0A' -replace '\r', '%0D'
+        echo "LOGS=$changelog" >> $env:GITHUB_OUTPUT
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
