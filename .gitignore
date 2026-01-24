@@ -18,3 +18,4 @@ env/
 games_data.zip
 pygame.py
 test_logic.py
+/webserver/games

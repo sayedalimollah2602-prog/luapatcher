@@ -1,15 +1,15 @@
 """
 Steam Lua Patcher - Cyberpunk Edition
 A futuristic gaming-focused UI built with PyQt6
+Now with remote Lua file fetching from webserver.
 """
 
 import os
 import shutil
 import subprocess
 import sys
-import tempfile
+import json
 import time
-import zipfile
 from typing import Optional
 
 from PyQt6.QtCore import (
@@ -27,8 +27,8 @@ from PyQt6.QtWidgets import (
     QHeaderView, QMessageBox, QProgressBar, QFrame, QScrollArea,
     QGraphicsDropShadowEffect, QSizePolicy, QAbstractItemView
 )
-
-
+from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
+from PyQt6.QtCore import QUrl
 
 
 def get_resource_path(relative_path):
@@ -38,6 +38,22 @@ def get_resource_path(relative_path):
     except Exception:
         base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONFIGURATION - UPDATE AFTER DEPLOYMENT
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Webserver URL - Update after deploying to Vercel
+WEBSERVER_BASE_URL = "https://webserver-ecru.vercel.app"  # Change to your Vercel URL, e.g., "https://your-app.vercel.app"
+
+# URLs for fetching data (both use the same webserver)
+GAMES_INDEX_URL = f"{WEBSERVER_BASE_URL}/api/games_index.json"
+LUA_FILE_URL = f"{WEBSERVER_BASE_URL}/lua/"
+
+# Local cache directory
+LOCAL_CACHE_DIR = os.path.join(os.getenv('APPDATA', os.path.expanduser('~')), 'SteamLuaPatcher')
+LOCAL_INDEX_PATH = os.path.join(LOCAL_CACHE_DIR, 'games_index.json')
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -297,54 +313,113 @@ STEAM_EXE_PATH = r"C:\Program Files (x86)\Steam\Steam.exe"
 # WORKER THREADS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
-from PyQt6.QtCore import QUrl
-
-class InitWorker(QThread):
-    """Thread for initializing the game data"""
-    finished = pyqtSignal(str, set)  # Emits the lua_files_dir path and set of existing app IDs
+class IndexDownloadWorker(QThread):
+    """Thread for downloading the games index JSON from the webserver"""
+    finished = pyqtSignal(set)  # Emits set of available app IDs
+    progress = pyqtSignal(str)  # Status updates
     error = pyqtSignal(str)
     
     def run(self):
         try:
-            lua_dir = ""
-            existing_files = set()
+            import urllib.request
+            import urllib.error
             
-            # Determine directory and extract if needed
-            if getattr(sys, 'frozen', False):
-                zip_path = get_resource_path("games_data.zip")
-                temp_dir = os.path.join(tempfile.gettempdir(), "SteamLuaPatcher_Cache")
-                
-                # Only extract if valid directory doesn't exist
-                should_extract = True
-                if os.path.exists(temp_dir):
-                    # Basic check: if it has files, assume it's good (optimization)
-                    # In a real app we might check version/hash
-                    if len(os.listdir(temp_dir)) > 0:
-                        should_extract = False
-                
-                if should_extract and os.path.exists(zip_path):
-                    if not os.path.exists(temp_dir):
-                        os.makedirs(temp_dir)
-                    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                        zip_ref.extractall(temp_dir)
-                
-                lua_dir = temp_dir
-            else:
-                lua_dir = get_resource_path("All Games Files")
+            self.progress.emit("CONNECTING TO SERVER...")
             
-            # Index files for O(1) lookup
-            if os.path.exists(lua_dir):
-                for filename in os.listdir(lua_dir):
-                    if filename.endswith(".lua"):
-                        # Store just the ID part, assuming "12345.lua"
-                        existing_files.add(filename[:-4])
+            # Ensure cache directory exists
+            if not os.path.exists(LOCAL_CACHE_DIR):
+                os.makedirs(LOCAL_CACHE_DIR)
             
-            self.finished.emit(lua_dir, existing_files)
+            # Try to download from server
+            try:
+                self.progress.emit("DOWNLOADING GAMES INDEX...")
+                
+                req = urllib.request.Request(
+                    GAMES_INDEX_URL,
+                    headers={'User-Agent': 'SteamLuaPatcher/2.0'}
+                )
+                
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    data = response.read().decode('utf-8')
+                    index_data = json.loads(data)
+                
+                # Save to cache
+                with open(LOCAL_INDEX_PATH, 'w') as f:
+                    json.dump(index_data, f)
+                
+                self.progress.emit("INDEX DOWNLOADED SUCCESSFULLY")
+                
+            except (urllib.error.URLError, urllib.error.HTTPError) as e:
+                # Try to load from cache
+                self.progress.emit("SERVER UNAVAILABLE, LOADING CACHE...")
+                if os.path.exists(LOCAL_INDEX_PATH):
+                    with open(LOCAL_INDEX_PATH, 'r') as f:
+                        index_data = json.load(f)
+                else:
+                    raise Exception("No cached index available and server is unreachable")
+            
+            # Extract app IDs
+            app_ids = set(index_data.get('app_ids', []))
+            self.progress.emit(f"LOADED {len(app_ids)} GAMES")
+            
+            self.finished.emit(app_ids)
             
         except Exception as e:
             self.error.emit(str(e))
 
+
+class LuaDownloadWorker(QThread):
+    """Thread for downloading a specific Lua file"""
+    finished = pyqtSignal(str)  # Emits path to downloaded file
+    progress = pyqtSignal(int, int)  # bytes downloaded, total bytes
+    status = pyqtSignal(str)
+    error = pyqtSignal(str)
+    
+    def __init__(self, app_id: str):
+        super().__init__()
+        self.app_id = app_id
+    
+    def run(self):
+        try:
+            import urllib.request
+            
+            self.status.emit(f"DOWNLOADING {self.app_id}.lua...")
+            
+            url = f"{LUA_FILE_URL}{self.app_id}.lua"
+            
+            req = urllib.request.Request(
+                url,
+                headers={'User-Agent': 'SteamLuaPatcher/2.0'}
+            )
+            
+            # Download to cache
+            cache_path = os.path.join(LOCAL_CACHE_DIR, f"{self.app_id}.lua")
+            
+            with urllib.request.urlopen(req, timeout=30) as response:
+                total_size = response.getheader('Content-Length')
+                total_size = int(total_size) if total_size else 0
+                
+                downloaded = 0
+                chunk_size = 8192
+                data = b''
+                
+                while True:
+                    chunk = response.read(chunk_size)
+                    if not chunk:
+                        break
+                    data += chunk
+                    downloaded += len(chunk)
+                    self.progress.emit(downloaded, total_size)
+            
+            # Save to cache
+            with open(cache_path, 'wb') as f:
+                f.write(data)
+            
+            self.status.emit("DOWNLOAD COMPLETE")
+            self.finished.emit(cache_path)
+            
+        except Exception as e:
+            self.error.emit(str(e))
 
 
 class RestartWorker(QThread):
@@ -440,6 +515,47 @@ class PulsingProgress(QProgressBar):
         self.setMaximum(0)  # Indeterminate
 
 
+class LoadingOverlay(QWidget):
+    """Loading overlay with animation"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet(f"background-color: rgba(10, 10, 15, 200);")
+        
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Loading text
+        self.label = GlowingLabel("⚡ SYNCING WITH SERVER...", CyberColors.NEON_CYAN)
+        self.label.setStyleSheet(f"""
+            font-size: 18px;
+            font-weight: bold;
+            color: {CyberColors.NEON_CYAN};
+            letter-spacing: 3px;
+        """)
+        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.label)
+        
+        # Progress bar
+        self.progress = PulsingProgress()
+        self.progress.setFixedWidth(300)
+        self.progress.setFixedHeight(4)
+        layout.addWidget(self.progress, alignment=Qt.AlignmentFlag.AlignCenter)
+        
+        # Status text
+        self.status = QLabel("INITIALIZING...")
+        self.status.setStyleSheet(f"""
+            font-size: 12px;
+            color: {CyberColors.TEXT_SECONDARY};
+            letter-spacing: 2px;
+            margin-top: 10px;
+        """)
+        self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.status)
+    
+    def set_status(self, text: str):
+        self.status.setText(text)
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # MAIN APPLICATION
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -457,15 +573,14 @@ class SteamPatcherApp(QMainWindow):
             pass
         
         # Data
-        self.lua_files_dir: Optional[str] = None
-        self.cached_files: set = set()
+        self.cached_app_ids: set = set()
         self.search_results = []
         self.current_search_id = 0
         self.debounce_timer = QTimer()
         self.debounce_timer.setSingleShot(True)
         self.debounce_timer.timeout.connect(self.start_search)
         
-        # Network Manager
+        # Network Manager for Steam API searches
         self.network_manager = QNetworkAccessManager()
         self.network_manager.finished.connect(self._on_search_finished)
         self.active_reply = None
@@ -560,7 +675,7 @@ class SteamPatcherApp(QMainWindow):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.verticalHeader().setVisible(False)
         self.table.setShowGrid(False)
-        self.table.setWordWrap(True)  # Enable word wrap for long names
+        self.table.setWordWrap(True)
         self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.table.itemSelectionChanged.connect(self.on_selection_change)
         results_layout.addWidget(self.table)
@@ -609,36 +724,53 @@ class SteamPatcherApp(QMainWindow):
         
         main_layout.addWidget(status_frame)
         
-        # Progress bar (hidden initially)
-        self.progress = PulsingProgress()
-        self.progress.setFixedHeight(4)
-        self.progress.hide()
-        main_layout.addWidget(self.progress)
+        # Download progress bar (hidden initially)
+        self.download_progress = QProgressBar()
+        self.download_progress.setFixedHeight(4)
+        self.download_progress.setTextVisible(False)
+        self.download_progress.hide()
+        main_layout.addWidget(self.download_progress)
+        
+        # Loading overlay (created but hidden)
+        self.loading_overlay = LoadingOverlay(central)
+        self.loading_overlay.hide()
+    
+    def resizeEvent(self, event):
+        """Resize loading overlay with window"""
+        super().resizeEvent(event)
+        if hasattr(self, 'loading_overlay'):
+            self.loading_overlay.setGeometry(self.centralWidget().rect())
     
     def _start_initialization(self):
-        """Start loading game data in background"""
-        self.progress.show()
-        self.set_status("LOADING DATABASE...", CyberColors.NEON_YELLOW)
+        """Start downloading games index from webserver"""
+        self.loading_overlay.show()
+        self.loading_overlay.raise_()
+        self.set_status("SYNCING WITH SERVER...", CyberColors.NEON_YELLOW)
         
-        self.init_worker = InitWorker()
-        self.init_worker.finished.connect(self._on_init_complete)
-        self.init_worker.error.connect(self._on_init_error)
-        self.init_worker.start()
+        self.index_worker = IndexDownloadWorker()
+        self.index_worker.finished.connect(self._on_init_complete)
+        self.index_worker.progress.connect(self._on_init_progress)
+        self.index_worker.error.connect(self._on_init_error)
+        self.index_worker.start()
     
-    def _on_init_complete(self, lua_dir: str, existing_files: set):
-        """Called when initialization is complete"""
-        self.lua_files_dir = lua_dir
-        self.cached_files = existing_files
-        self.progress.hide()
+    def _on_init_progress(self, message: str):
+        """Update loading overlay with progress"""
+        self.loading_overlay.set_status(message)
+        self.set_status(message, CyberColors.NEON_YELLOW)
+    
+    def _on_init_complete(self, app_ids: set):
+        """Called when index download is complete"""
+        self.cached_app_ids = app_ids
+        self.loading_overlay.hide()
         self.search_input.setEnabled(True)
         self.search_input.setFocus()
-        self.set_status("SYSTEM READY // ENTER GAME NAME TO SEARCH", CyberColors.NEON_GREEN)
+        self.set_status(f"SYSTEM READY // {len(app_ids)} GAMES AVAILABLE", CyberColors.NEON_GREEN)
     
     def _on_init_error(self, error: str):
         """Called when initialization fails"""
-        self.progress.hide()
+        self.loading_overlay.hide()
         self.set_status(f"INIT ERROR: {error}", CyberColors.NEON_RED)
-        QMessageBox.critical(self, "Initialization Error", f"Failed to load game data:\n{error}")
+        QMessageBox.critical(self, "Initialization Error", f"Failed to load games index:\n{error}")
     
     def set_status(self, message: str, color: str = CyberColors.NEON_CYAN):
         """Update status bar"""
@@ -652,7 +784,7 @@ class SteamPatcherApp(QMainWindow):
             self.debounce_timer.start(400)  # 400ms debounce
     
     def start_search(self):
-        """Execute the search"""
+        """Execute the search via Steam API"""
         query = self.search_input.text().strip()
         if not query:
             return
@@ -684,7 +816,7 @@ class SteamPatcherApp(QMainWindow):
         self.active_reply.setProperty("search_id", self.current_search_id)
     
     def _on_search_finished(self, reply: QNetworkReply):
-        """Handle search results"""
+        """Handle search results from Steam API"""
         reply.deleteLater()
         self.active_reply = None
         
@@ -700,7 +832,6 @@ class SteamPatcherApp(QMainWindow):
             return
 
         try:
-            import json
             data = json.loads(reply.readAll().data().decode("utf-8"))
             items = data.get("items", [])
             self._update_results_table(items)
@@ -725,8 +856,8 @@ class SteamPatcherApp(QMainWindow):
             name = item.get("name", "Unknown")
             appid = str(item.get("id", ""))
             
-            # Use cached Set for O(1) lookup
-            exists = appid in self.cached_files
+            # Check against cached app IDs from webserver
+            exists = appid in self.cached_app_ids
             
             status = "✓ AVAILABLE" if exists else "✗ MISSING"
             status_color = CyberColors.NEON_GREEN if exists else CyberColors.NEON_RED
@@ -778,7 +909,7 @@ class SteamPatcherApp(QMainWindow):
             self.patch_btn.setEnabled(False)
     
     def patch_selected(self):
-        """Copy the lua file to Steam plugin directory"""
+        """Download and copy the lua file to Steam plugin directory"""
         selected = self.table.selectedItems()
         if not selected:
             return
@@ -787,17 +918,43 @@ class SteamPatcherApp(QMainWindow):
         name = self.table.item(row, 0).text()
         appid = self.table.item(row, 1).text()
         
-        if not self.lua_files_dir:
-            return
+        # Disable buttons during download
+        self.patch_btn.setEnabled(False)
+        self.restart_btn.setEnabled(False)
         
-        src_file = os.path.join(self.lua_files_dir, f"{appid}.lua")
-        dest_file = os.path.join(STEAM_PLUGIN_DIR, f"{appid}.lua")
+        # Show progress
+        self.download_progress.setMinimum(0)
+        self.download_progress.setMaximum(100)
+        self.download_progress.setValue(0)
+        self.download_progress.show()
         
+        # Start download worker
+        self.download_worker = LuaDownloadWorker(appid)
+        self.download_worker.finished.connect(lambda path: self._on_download_complete(path, name, appid))
+        self.download_worker.progress.connect(self._on_download_progress)
+        self.download_worker.status.connect(lambda s: self.set_status(s, CyberColors.NEON_YELLOW))
+        self.download_worker.error.connect(self._on_download_error)
+        self.download_worker.start()
+    
+    def _on_download_progress(self, downloaded: int, total: int):
+        """Update download progress bar"""
+        if total > 0:
+            percent = int((downloaded / total) * 100)
+            self.download_progress.setValue(percent)
+    
+    def _on_download_complete(self, cache_path: str, name: str, appid: str):
+        """Copy downloaded file to Steam plugin directory"""
         try:
+            dest_file = os.path.join(STEAM_PLUGIN_DIR, f"{appid}.lua")
+            
             if not os.path.exists(STEAM_PLUGIN_DIR):
                 os.makedirs(STEAM_PLUGIN_DIR)
             
-            shutil.copy2(src_file, dest_file)
+            shutil.copy2(cache_path, dest_file)
+            
+            self.download_progress.hide()
+            self.patch_btn.setEnabled(True)
+            self.restart_btn.setEnabled(True)
             
             QMessageBox.information(
                 self, 
@@ -807,12 +964,20 @@ class SteamPatcherApp(QMainWindow):
             self.set_status(f"PATCHED: {name.upper()}", CyberColors.NEON_GREEN)
             
         except Exception as e:
-            QMessageBox.critical(
-                self,
-                "❌ PATCH FAILED",
-                f"Failed to copy lua file:\n\n{str(e)}"
-            )
-            self.set_status(f"PATCH FAILED: {str(e)}", CyberColors.NEON_RED)
+            self._on_download_error(str(e))
+    
+    def _on_download_error(self, error: str):
+        """Handle download errors"""
+        self.download_progress.hide()
+        self.patch_btn.setEnabled(True)
+        self.restart_btn.setEnabled(True)
+        
+        QMessageBox.critical(
+            self,
+            "❌ DOWNLOAD FAILED",
+            f"Failed to download lua file:\n\n{error}"
+        )
+        self.set_status(f"DOWNLOAD FAILED: {error}", CyberColors.NEON_RED)
     
     def restart_steam(self):
         """Restart Steam application"""
