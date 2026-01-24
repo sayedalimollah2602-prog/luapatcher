@@ -1,6 +1,6 @@
 """
-Steam Lua Patcher - Clean Modern Edition
-A compact, card-based UI built with PyQt6
+Steam Lua Patcher - Modern Glass Edition
+A premium, dark-mode UI built with PyQt6
 """
 
 import os
@@ -12,16 +12,18 @@ import time
 from typing import Optional
 
 from PyQt6.QtCore import (
-    Qt, QThread, pyqtSignal, QTimer, QSize
+    Qt, QThread, pyqtSignal, QTimer, QSize, QPropertyAnimation, 
+    QEasingCurve, QPoint, QPointF, QRect, QRectF
 )
 from PyQt6.QtGui import (
-    QFont, QColor, QPainter, QIcon, QPixmap
+    QFont, QColor, QPainter, QIcon, QPixmap, QLinearGradient, 
+    QBrush, QPen, QPainterPath
 )
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QListWidget, QListWidgetItem,
     QMessageBox, QProgressBar, QFrame, QGraphicsDropShadowEffect,
-    QAbstractItemView, QStackedWidget
+    QAbstractItemView, QStackedWidget, QGraphicsOpacityEffect
 )
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from PyQt6.QtCore import QUrl
@@ -37,153 +39,278 @@ def get_resource_path(relative_path):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# CONFIGURATION - UPDATE AFTER DEPLOYMENT
+# CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Webserver URL - Update after deploying to Vercel
 WEBSERVER_BASE_URL = "https://webserver-ecru.vercel.app"
-
-# URLs for fetching data (both use the same webserver)
 GAMES_INDEX_URL = f"{WEBSERVER_BASE_URL}/api/games_index.json"
 LUA_FILE_URL = f"{WEBSERVER_BASE_URL}/lua/"
 
-# Local cache directory
 LOCAL_CACHE_DIR = os.path.join(os.getenv('APPDATA', os.path.expanduser('~')), 'SteamLuaPatcher')
 LOCAL_INDEX_PATH = os.path.join(LOCAL_CACHE_DIR, 'games_index.json')
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# COLOR PALETTE
-# ═══════════════════════════════════════════════════════════════════════════════
-
-class Colors:
-    BG_DARK = "#0d1117"
-    BG_CARD = "#161b22"
-    BG_CARD_HOVER = "#1c2128"
-    ACCENT_BLUE = "#4f8cff"
-    ACCENT_PURPLE = "#a855f7"
-    ACCENT_GREEN = "#22c55e"
-    TEXT_PRIMARY = "#e6edf3"
-    TEXT_SECONDARY = "#8b949e"
-    BORDER = "#30363d"
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# STYLESHEET
-# ═══════════════════════════════════════════════════════════════════════════════
-
-STYLESHEET = f"""
-QMainWindow {{
-    background-color: {Colors.BG_DARK};
-}}
-
-QWidget {{
-    background-color: transparent;
-    color: {Colors.TEXT_PRIMARY};
-    font-family: 'Segoe UI', sans-serif;
-}}
-
-QLabel {{
-    background: transparent;
-}}
-
-QLineEdit {{
-    background-color: {Colors.BG_CARD};
-    border: 1px solid {Colors.BORDER};
-    border-radius: 8px;
-    padding: 10px 14px;
-    font-size: 13px;
-    color: {Colors.TEXT_PRIMARY};
-}}
-
-QLineEdit:focus {{
-    border: 1px solid {Colors.ACCENT_BLUE};
-}}
-
-QListWidget {{
-    background-color: {Colors.BG_CARD};
-    border: 1px solid {Colors.BORDER};
-    border-radius: 8px;
-    padding: 4px;
-    outline: none;
-}}
-
-QListWidget::item {{
-    background-color: transparent;
-    border-radius: 6px;
-    padding: 8px;
-    margin: 2px 0;
-}}
-
-QListWidget::item:selected {{
-    background-color: {Colors.ACCENT_BLUE}30;
-}}
-
-QListWidget::item:hover {{
-    background-color: {Colors.BG_CARD_HOVER};
-}}
-
-QScrollBar:vertical {{
-    background-color: {Colors.BG_CARD};
-    width: 8px;
-    border-radius: 4px;
-}}
-
-QScrollBar::handle:vertical {{
-    background-color: {Colors.BORDER};
-    border-radius: 4px;
-    min-height: 20px;
-}}
-
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-    height: 0;
-}}
-
-QProgressBar {{
-    background-color: {Colors.BG_CARD};
-    border: none;
-    border-radius: 4px;
-    height: 4px;
-    text-align: center;
-}}
-
-QProgressBar::chunk {{
-    background-color: {Colors.ACCENT_BLUE};
-    border-radius: 4px;
-}}
-
-QMessageBox {{
-    background-color: {Colors.BG_CARD};
-}}
-
-QMessageBox QLabel {{
-    color: {Colors.TEXT_PRIMARY};
-}}
-
-QMessageBox QPushButton {{
-    background-color: {Colors.BG_CARD};
-    border: 1px solid {Colors.BORDER};
-    border-radius: 6px;
-    padding: 8px 16px;
-    min-width: 70px;
-}}
-
-QMessageBox QPushButton:hover {{
-    background-color: {Colors.BG_CARD_HOVER};
-}}
-"""
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# CONSTANTS
-# ═══════════════════════════════════════════════════════════════════════════════
 
 STEAM_PLUGIN_DIR = r"C:\Program Files (x86)\Steam\config\stplug-in"
 STEAM_EXE_PATH = r"C:\Program Files (x86)\Steam\Steam.exe"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# WORKER THREADS
+# DESIGN SYSTEM
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class Colors:
+    # Deep Blue to Black Gradient
+    BG_GRADIENT_START = "#0f1c30" 
+    BG_GRADIENT_END = "#02040a"
+    
+    # Glass Components
+    GLASS_BG = "rgba(30, 41, 59, 60)"       # Low opacity for glass feel
+    GLASS_HOVER = "rgba(51, 65, 85, 80)"
+    GLASS_BORDER = "rgba(255, 255, 255, 25)" # Subtle white border
+    
+    # Text
+    TEXT_PRIMARY = "#FFFFFF"
+    TEXT_SECONDARY = "#94A3B8"  # Slate 400
+    
+    # Accents
+    ACCENT_BLUE = "#3B82F6"
+    ACCENT_PURPLE = "#8B5CF6"
+    ACCENT_GREEN = "#10B981"
+    ACCENT_RED = "#EF4444"
+
+
+STYLESHEET = f"""
+QMainWindow {{
+    background: transparent;
+}}
+
+QWidget {{
+    font-family: 'Segoe UI', sans-serif;
+    color: {Colors.TEXT_PRIMARY};
+}}
+
+/* Scrollbar */
+QScrollBar:vertical {{
+    background-color: transparent;
+    width: 6px;
+    margin: 0px;
+}}
+QScrollBar::handle:vertical {{
+    background-color: {Colors.GLASS_BORDER};
+    border-radius: 3px;
+    min-height: 20px;
+}}
+QScrollBar::handle:vertical:hover {{
+    background-color: {Colors.ACCENT_BLUE};
+}}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+    height: 0px;
+}}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+    background: none;
+}}
+
+/* List Widget */
+QListWidget {{
+    background-color: transparent;
+    border: none;
+    outline: none;
+}}
+QListWidget::item {{
+    background-color: {Colors.GLASS_BG};
+    border: 1px solid {Colors.GLASS_BORDER};
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 8px;
+    color: {Colors.TEXT_PRIMARY};
+}}
+QListWidget::item:hover {{
+    background-color: {Colors.GLASS_HOVER};
+    border: 1px solid {Colors.ACCENT_BLUE}80;
+}}
+QListWidget::item:selected {{
+    background-color: {Colors.ACCENT_BLUE}20;
+    border: 1px solid {Colors.ACCENT_BLUE};
+}}
+
+/* Inputs */
+QLineEdit {{
+    background-color: {Colors.GLASS_BG};
+    border: 1px solid {Colors.GLASS_BORDER};
+    border-radius: 12px;
+    padding: 14px 16px;
+    font-size: 14px;
+    selection-background-color: {Colors.ACCENT_BLUE};
+    color: {Colors.TEXT_PRIMARY};
+}}
+QLineEdit:focus {{
+    border: 1px solid {Colors.ACCENT_BLUE};
+    background-color: {Colors.GLASS_HOVER};
+}}
+
+/* MessageBox */
+QMessageBox {{
+    background-color: #1e293b;
+}}
+QMessageBox QLabel {{
+    color: {Colors.TEXT_PRIMARY};
+}}
+QMessageBox QPushButton {{
+    background-color: {Colors.ACCENT_BLUE};
+    color: white;
+    border-radius: 6px;
+    padding: 6px 16px;
+    border: none;
+}}
+"""
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# UI COMPONENTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class GlassButton(QPushButton):
+    """
+    Large horizontal action button with glassmorphism style.
+    Contains: Icon (left), Title (bold), Description (muted).
+    """
+    def __init__(self, icon_char, title, description, accent_color, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(80)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        
+        self.icon_char = icon_char
+        self.title_text = title
+        self.desc_text = description
+        self.accent_color = accent_color
+        
+        # Opacity effect for disabled state
+        self.opacity_effect = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self.opacity_effect)
+        self.opacity_effect.setOpacity(1.0)
+
+        # Setup internal layout setup isn't needed for pure painting, 
+        # but useful if we wanted child widgets. We'll use pure painting for performance and look.
+    
+    def setEnabled(self, enabled):
+        super().setEnabled(enabled)
+        self.opacity_effect.setOpacity(1.0 if enabled else 0.5)
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Determine State
+        is_hover = self.underMouse() and self.isEnabled()
+        is_pressed = self.isDown() and self.isEnabled()
+        
+        # Rects
+        rect = self.rect()
+        bg_rect = rect.adjusted(1, 1, -1, -1)
+        
+        # 1. Background (Glass)
+        bg_color = QColor(Colors.GLASS_BG)
+        if is_hover:
+            bg_color = QColor(Colors.GLASS_HOVER)
+        if is_pressed:
+            bg_color = QColor(self.accent_color)
+            bg_color.setAlpha(40)
+            
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(bg_rect), 16, 16)
+        
+        painter.fillPath(path, bg_color)
+        
+        # 2. Border (Subtle Gradient or Solid)
+        border_color = QColor(Colors.GLASS_BORDER)
+        if is_hover or is_pressed:
+            border_color = QColor(self.accent_color)
+            border_color.setAlpha(100)
+            
+        pen = QPen(border_color, 1)
+        painter.setPen(pen)
+        painter.drawPath(path)
+        
+        # 3. Inner Glow (Simplified as a soft gradient overlay if needed, skipping for cleaner look)
+        
+        # 4. Icon Box (Left)
+        icon_size = 48
+        icon_rect = QRect(20, (rect.height() - icon_size) // 2, icon_size, icon_size)
+        
+        # Icon Background Gradient
+        grad = QLinearGradient(QPointF(icon_rect.topLeft()), QPointF(icon_rect.bottomRight()))
+        c1 = QColor(self.accent_color)
+        c2 = c1.darker(150)
+        grad.setColorAt(0, c1)
+        grad.setColorAt(1, c2)
+        
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(grad))
+        painter.drawRoundedRect(icon_rect, 12, 12)
+        
+        # Icon Text
+        painter.setPen(QColor("#FFFFFF"))
+        painter.setFont(QFont("Segoe UI Symbol", 18)) # Use Symbol font for icons
+        painter.drawText(icon_rect, Qt.AlignmentFlag.AlignCenter, self.icon_char)
+        
+        # 5. Text Content
+        text_x = 20 + icon_size + 16
+        text_w = rect.width() - text_x - 10
+        
+        # Title
+        title_rect = QRect(text_x, 18, text_w, 24)
+        painter.setPen(QColor(Colors.TEXT_PRIMARY))
+        painter.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        painter.drawText(title_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.title_text)
+        
+        # Description
+        desc_rect = QRect(text_x, 42, text_w, 20)
+        painter.setPen(QColor(Colors.TEXT_SECONDARY))
+        painter.setFont(QFont("Segoe UI", 9))
+        painter.drawText(desc_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.desc_text)
+
+
+class LoadingSpinner(QLabel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(60, 60)
+        self.setScaledContents(True)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.timer = QTimer()
+        self.timer.timeout.connect(self._rotate)
+        self.angle = 0
+        
+    def _rotate(self):
+        self.angle = (self.angle + 30) % 360
+        self.update()
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        center = QPoint(self.width() // 2, self.height() // 2)
+        
+        pen = QPen(QColor(Colors.ACCENT_BLUE), 4)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        
+        # Draw arc
+        rect = QRect(10, 10, 40, 40)
+        start_angle = -self.angle * 16
+        span_angle = 270 * 16
+        painter.drawArc(rect, start_angle, span_angle)
+
+    def start(self):
+        self.timer.start(50)
+        self.show()
+    
+    def stop(self):
+        self.timer.stop()
+        self.hide()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# WORKER THREADS (Preserved Logic)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class IndexDownloadWorker(QThread):
@@ -193,7 +320,6 @@ class IndexDownloadWorker(QThread):
     
     def run(self):
         try:
-            # Move imports to top or keep local if needed, but clean logic
             import urllib.request
             import urllib.error
             
@@ -203,13 +329,11 @@ class IndexDownloadWorker(QThread):
                 os.makedirs(LOCAL_CACHE_DIR)
             
             try:
-                self.progress.emit("Syncing games...")
-                
+                self.progress.emit("Syncing library...")
                 req = urllib.request.Request(
                     GAMES_INDEX_URL,
                     headers={'User-Agent': 'SteamLuaPatcher/2.0'}
                 )
-                
                 with urllib.request.urlopen(req, timeout=30) as response:
                     data = response.read().decode('utf-8')
                     index_data = json.loads(data)
@@ -218,12 +342,12 @@ class IndexDownloadWorker(QThread):
                     json.dump(index_data, f)
                 
             except (urllib.error.URLError, urllib.error.HTTPError):
-                self.progress.emit("Using cached data...")
+                self.progress.emit("Offline mode...")
                 if os.path.exists(LOCAL_INDEX_PATH):
                     with open(LOCAL_INDEX_PATH, 'r') as f:
                         index_data = json.load(f)
                 else:
-                    raise Exception("Check internet connection")
+                    raise Exception("Network error & no cache")
             
             app_ids = set(index_data.get('app_ids', []))
             self.finished.emit(app_ids)
@@ -245,7 +369,6 @@ class LuaDownloadWorker(QThread):
     def run(self):
         try:
             import urllib.request
-            
             self.status.emit(f"Downloading patch...")
             
             url = f"{LUA_FILE_URL}{self.app_id}.lua"
@@ -253,30 +376,22 @@ class LuaDownloadWorker(QThread):
             cache_path = os.path.join(LOCAL_CACHE_DIR, f"{self.app_id}.lua")
             
             with urllib.request.urlopen(req, timeout=30) as response:
-                total_size = response.getheader('Content-Length')
-                total_size = int(total_size) if total_size else 0
-                
+                total_size = int(response.getheader('Content-Length') or 0)
                 downloaded = 0
                 data = b''
                 chunk_size = 8192
-                
-                # Throttle progress updates: only emit every 1% or 200ms
-                last_emit_time = 0
-                import time
+                last_emit = 0
                 
                 while True:
                     chunk = response.read(chunk_size)
-                    if not chunk:
-                        break
+                    if not chunk: break
                     data += chunk
                     downloaded += len(chunk)
                     
-                    # Throttle signals to main thread to prevent UI freeze
-                    current_time = time.time()
-                    if total_size > 0:
-                        if (current_time - last_emit_time) > 0.1:  # Max 10 updates per second
-                            self.progress.emit(downloaded, total_size)
-                            last_emit_time = current_time
+                    now = time.time()
+                    if total_size > 0 and (now - last_emit) > 0.1:
+                        self.progress.emit(downloaded, total_size)
+                        last_emit = now
             
             with open(cache_path, 'wb') as f:
                 f.write(data)
@@ -296,283 +411,200 @@ class RestartWorker(QThread):
             subprocess.run("taskkill /F /IM steam.exe", shell=True, 
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             time.sleep(2)
-            
             if os.path.exists(STEAM_EXE_PATH):
                 subprocess.Popen([STEAM_EXE_PATH])
-                self.finished.emit("Steam restarted!")
+                self.finished.emit("Steam launched!")
             else:
                 subprocess.run("start steam://open/main", shell=True)
-                self.finished.emit("Steam restart sent.")
+                self.finished.emit("Restart command sent.")
         except Exception as e:
             self.error.emit(str(e))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# CUSTOM WIDGETS
-# ═══════════════════════════════════════════════════════════════════════════════
-
-class ActionButton(QPushButton):
-    """Compact action button with icon"""
-    
-    def __init__(self, icon_char: str, title: str, accent_color: str, parent=None):
-        super().__init__(f"{icon_char}  {title}", parent)
-        self.accent_color = accent_color
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFixedHeight(42)
-        self.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {Colors.BG_CARD};
-                border: 1px solid {Colors.BORDER};
-                border-radius: 8px;
-                font-size: 13px;
-                font-weight: 500;
-                color: {Colors.TEXT_PRIMARY};
-                padding: 0 16px;
-            }}
-            QPushButton:hover {{
-                background-color: {Colors.BG_CARD_HOVER};
-                border: 1px solid {accent_color}60;
-            }}
-            QPushButton:pressed {{
-                background-color: {accent_color}20;
-            }}
-            QPushButton:disabled {{
-                color: {Colors.TEXT_SECONDARY};
-                background-color: {Colors.BG_CARD};
-            }}
-        """)
-
-
-from PyQt6.QtCore import QPropertyAnimation, QEasingCurve
-
-class LoadingSpinner(QLabel):
-    """Smoother loading indicator using QPropertyAnimation"""
-    def __init__(self, parent=None):
-        super().__init__("⟳", parent)
-        self.setStyleSheet(f"font-size: 28px; color: {Colors.ACCENT_BLUE}; font-weight: bold;")
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setFixedSize(40, 40)
-        
-        # Setup modern layout based rotation
-        self.timer = QTimer()
-        self.timer.timeout.connect(self._rotate)
-        self.angle = 0
-        
-    def _rotate(self):
-        # Rotate text symbol
-        self.angle = (self.angle + 1)
-        # Use simpler but lighter animation
-        chars = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"]
-        self.setText(chars[self.angle % len(chars)])
-    
-    def start(self):
-        # 80ms interval is smooth (12fps) but light
-        self.timer.start(80)
-        self.show()
-    
-    def stop(self):
-        self.timer.stop()
-        self.hide()
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# MAIN APPLICATION
+# MAIN WINDOW
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class SteamPatcherApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Steam Lua Patcher")
-        self.setFixedSize(420, 520)
+        self.setFixedSize(900, 600) # Larger size for modern layout
         
         try:
             self.setWindowIcon(QIcon(get_resource_path("logo.ico")))
         except:
             pass
-        
-        self.cached_app_ids: set = set()
-        self.search_results = []
+            
+        self.cached_app_ids = set()
         self.selected_game = None
-        self.current_search_id = 0
         
+        # Search debounce
         self.debounce_timer = QTimer()
         self.debounce_timer.setSingleShot(True)
         self.debounce_timer.timeout.connect(self.do_search)
+        self.current_search_id = 0
         
+        # Network
         self.network_manager = QNetworkAccessManager()
         self.network_manager.finished.connect(self._on_search_finished)
         self.active_reply = None
-        
-        self._setup_ui()
-        self._start_init()
-    
-    def _setup_ui(self):
+
+        self._init_ui()
+        self._start_sync()
+
+    def paintEvent(self, event):
+        """Paint the custom gradient background"""
+        painter = QPainter(self)
+        grad = QLinearGradient(0, 0, 0, self.height())
+        grad.setColorAt(0, QColor(Colors.BG_GRADIENT_START))
+        grad.setColorAt(1, QColor(Colors.BG_GRADIENT_END))
+        painter.fillRect(self.rect(), grad)
+
+    def _init_ui(self):
         central = QWidget()
         self.setCentralWidget(central)
+        main_layout = QHBoxLayout(central)
+        main_layout.setContentsMargins(40, 40, 40, 40)
+        main_layout.setSpacing(40)
         
-        main_layout = QVBoxLayout(central)
-        main_layout.setContentsMargins(24, 24, 24, 24)
-        main_layout.setSpacing(20)
+        # ─── LEFT COLUMN: ACTIONS (1/3 width) ───
+        left_col = QVBoxLayout()
+        left_col.setSpacing(16)
         
-        # ═══════════ HEADER ═══════════
-        header = QVBoxLayout()
-        header.setSpacing(4)
-        header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Header
+        header_layout = QHBoxLayout()
+        icon = QLabel("⚡")
+        icon.setStyleSheet(f"font-size: 32px; color: {Colors.ACCENT_BLUE}; font-weight: bold;")
+        title = QLabel("Lua Patcher")
+        title.setStyleSheet(f"font-size: 24px; font-weight: 800; color: {Colors.TEXT_PRIMARY};")
+        header_layout.addWidget(icon)
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+        left_col.addLayout(header_layout)
         
-        # Icon
-        icon_frame = QFrame()
-        icon_frame.setFixedSize(56, 56)
-        icon_frame.setStyleSheet(f"""
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
-                stop:0 {Colors.ACCENT_BLUE}, stop:1 {Colors.ACCENT_PURPLE});
-            border-radius: 14px;
-        """)
-        icon_layout = QVBoxLayout(icon_frame)
-        icon_layout.setContentsMargins(0, 0, 0, 0)
-        icon_label = QLabel("⚡")
-        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_label.setStyleSheet("font-size: 26px;")
-        icon_layout.addWidget(icon_label)
+        left_col.addSpacing(20)
         
-        header.addWidget(icon_frame, alignment=Qt.AlignmentFlag.AlignCenter)
-        header.addSpacing(12)
+        # Status
+        self.status_label = QLabel("Initializing...")
+        self.status_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; font-size: 13px;")
+        left_col.addWidget(self.status_label)
         
-        title = QLabel("Steam Lua Patcher")
-        title.setStyleSheet(f"font-size: 22px; font-weight: bold; color: {Colors.TEXT_PRIMARY};")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header.addWidget(title)
+        left_col.addStretch()
         
-        self.status_label = QLabel("Loading...")
-        self.status_label.setStyleSheet(f"font-size: 13px; color: {Colors.TEXT_SECONDARY};")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header.addWidget(self.status_label)
+        # Buttons
+        self.btn_patch = GlassButton("⬇", "Patch Game", "Install Lua patch for selected game", Colors.ACCENT_GREEN)
+        self.btn_patch.clicked.connect(self.do_patch)
+        self.btn_patch.setEnabled(False) # Disabled until game selected
+        left_col.addWidget(self.btn_patch)
         
-        main_layout.addLayout(header)
+        self.btn_restart = GlassButton("↻", "Restart Steam", "Apply changes by restarting Steam", Colors.ACCENT_PURPLE)
+        self.btn_restart.clicked.connect(self.do_restart)
+        left_col.addWidget(self.btn_restart)
         
-        # ═══════════ STACKED WIDGET ═══════════
-        self.stack = QStackedWidget()
-        main_layout.addWidget(self.stack, 1)
+        main_layout.addLayout(left_col, 35) # 35% width
         
-        # Loading page
-        self.loading_page = QWidget()
-        loading_layout = QVBoxLayout(self.loading_page)
-        loading_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.spinner = LoadingSpinner()
-        loading_layout.addWidget(self.spinner)
-        self.stack.addWidget(self.loading_page)
+        # ─── RIGHT COLUMN: SEARCH & LIST (2/3 width) ───
+        right_col = QVBoxLayout()
+        right_col.setSpacing(16)
         
-        # Main page
-        self.main_page = QWidget()
-        main_page_layout = QVBoxLayout(self.main_page)
-        main_page_layout.setContentsMargins(0, 0, 0, 0)
-        main_page_layout.setSpacing(12)
-        
-        # Search
+        # Search Bar
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍  Search for a game...")
+        self.search_input.setPlaceholderText("Find a game...")
         self.search_input.textChanged.connect(self.on_search_change)
-        main_page_layout.addWidget(self.search_input)
         
-        # Results list
+        # Add shadow to search
+        shadow = QGraphicsDropShadowEffect(self.search_input)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor(0, 0, 0, 80))
+        shadow.setOffset(0, 4)
+        self.search_input.setGraphicsEffect(shadow)
+        
+        right_col.addWidget(self.search_input)
+        
+        # Stack for Loading / List
+        self.stack = QStackedWidget()
+        
+        # 1. Loading Page
+        page_loading = QWidget()
+        lay_loading = QVBoxLayout(page_loading)
+        lay_loading.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.spinner = LoadingSpinner()
+        lay_loading.addWidget(self.spinner)
+        self.stack.addWidget(page_loading)
+        
+        # 2. Results Page
         self.results_list = QListWidget()
-        self.results_list.setUniformItemSizes(True)  # Performance optimization
-        self.results_list.setBatchSize(100)
-        self.results_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        # Use itemPressed for immediate visual feedback
+        self.results_list.setIconSize(QSize(40, 40))  # Big icons
         self.results_list.itemPressed.connect(self.on_game_selected)
-        # Keep currentItemChanged for keyboard navigation
-        self.results_list.currentItemChanged.connect(self.on_game_selected)
         
-        # Local stylesheet for faster repaints (prevents global recalc)
-        self.results_list.setStyleSheet(f"""
-            QListWidget {{
-                background-color: {Colors.BG_CARD};
-                border: 1px solid {Colors.BORDER};
-                border-radius: 8px;
-                padding: 4px;
-                outline: none;
-            }}
-            QListWidget::item {{
-                background-color: transparent;
-                border-radius: 6px;
-                padding: 8px;
-                margin: 2px 0;
-            }}
-            QListWidget::item:selected {{
-                background-color: {Colors.ACCENT_GREEN}40;  /* Green tint for selection */
-                border: 1px solid {Colors.ACCENT_GREEN};
-            }}
-            QListWidget::item:hover {{
-                background-color: {Colors.BG_CARD_HOVER};
-            }}
-        """)
+        # Add scroll shadow? Maybe complex. Keep simple.
         
-        main_page_layout.addWidget(self.results_list, 1)
+        self.stack.addWidget(self.results_list)
         
-        # Action buttons (horizontal)
-        buttons_layout = QHBoxLayout()
-        buttons_layout.setSpacing(10)
+        right_col.addWidget(self.stack)
         
-        self.patch_btn = ActionButton("⬇", "Patch Game", Colors.ACCENT_BLUE)
-        self.patch_btn.clicked.connect(self.do_patch)
-        self.patch_btn.setEnabled(False)
-        buttons_layout.addWidget(self.patch_btn)
-        
-        self.restart_btn = ActionButton("↻", "Restart Steam", Colors.ACCENT_PURPLE)
-        self.restart_btn.clicked.connect(self.do_restart)
-        buttons_layout.addWidget(self.restart_btn)
-        
-        main_page_layout.addLayout(buttons_layout)
-        
-        self.stack.addWidget(self.main_page)
-        
-        # Progress bar
+        # Progress Bar overlay (at bottom of right col)
         self.progress = QProgressBar()
         self.progress.setFixedHeight(4)
         self.progress.setTextVisible(False)
+        self.progress.setStyleSheet(f"""
+            QProgressBar {{
+                background: {Colors.GLASS_BG};
+                border-radius: 2px;
+            }}
+            QProgressBar::chunk {{
+                background: {Colors.ACCENT_GREEN};
+                border-radius: 2px;
+            }}
+        """)
         self.progress.hide()
-        main_layout.addWidget(self.progress)
-    
-    def _start_init(self):
-        self.stack.setCurrentWidget(self.loading_page)
-        self.spinner.start()
-        self.status_label.setText("Syncing with server...")
+        right_col.addWidget(self.progress)
         
-        self.init_worker = IndexDownloadWorker()
-        self.init_worker.finished.connect(self._on_init_done)
-        self.init_worker.progress.connect(lambda s: self.status_label.setText(s))
-        self.init_worker.error.connect(self._on_init_error)
-        self.init_worker.start()
+        main_layout.addLayout(right_col, 65) # 65% width
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # LOGIC
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def _start_sync(self):
+        self.stack.setCurrentIndex(0) # Loading
+        self.spinner.start()
+        
+        self.sync_worker = IndexDownloadWorker()
+        self.sync_worker.finished.connect(self._on_sync_done)
+        self.sync_worker.progress.connect(self.status_label.setText)
+        self.sync_worker.error.connect(self._on_sync_error)
+        self.sync_worker.start()
     
-    def _on_init_done(self, app_ids):
+    def _on_sync_done(self, app_ids):
         self.cached_app_ids = app_ids
         self.spinner.stop()
-        self.stack.setCurrentWidget(self.main_page)
-        self.status_label.setText(f"Ready • {len(app_ids):,} games available")
+        self.stack.setCurrentIndex(1) # List
+        self.status_label.setText(f"Online • {len(app_ids):,} supported games")
         self.search_input.setFocus()
     
-    def _on_init_error(self, error):
+    def _on_sync_error(self, err):
         self.spinner.stop()
-        self.status_label.setText(f"Error: {error}")
-        QMessageBox.critical(self, "Error", f"Failed to load:\n{error}")
-    
+        self.stack.setCurrentIndex(1)
+        self.status_label.setText("Offline Mode")
+        QMessageBox.warning(self, "Connection Error", f"Could not sync library:\n{err}")
+
     def on_search_change(self, text):
         self.debounce_timer.stop()
         if text.strip():
             self.debounce_timer.start(400)
         else:
             self.results_list.clear()
-    
+            
     def do_search(self):
         query = self.search_input.text().strip()
-        if not query:
-            return
+        if not query: return
         
         self.current_search_id += 1
-        self.status_label.setText(f"Searching...")
+        self.status_label.setText("Searching Store...")
         
-        if self.active_reply:
-            self.active_reply.abort()
+        if self.active_reply: self.active_reply.abort()
         
         from PyQt6.QtCore import QUrlQuery
         url = QUrl("https://store.steampowered.com/api/storesearch")
@@ -582,161 +614,156 @@ class SteamPatcherApp(QMainWindow):
         q.addQueryItem("cc", "US")
         url.setQuery(q)
         
-        request = QNetworkRequest(url)
-        self.active_reply = self.network_manager.get(request)
-        self.active_reply.setProperty("search_id", self.current_search_id)
-    
+        req = QNetworkRequest(url)
+        self.active_reply = self.network_manager.get(req)
+        self.active_reply.setProperty("sid", self.current_search_id)
+
     def _on_search_finished(self, reply: QNetworkReply):
         reply.deleteLater()
         self.active_reply = None
         
-        if reply.error() == QNetworkReply.NetworkError.OperationCanceledError:
-            return
-        
-        if reply.property("search_id") != self.current_search_id:
-            return
+        if reply.error() == QNetworkReply.NetworkError.OperationCanceledError: return
+        if reply.property("sid") != self.current_search_id: return
         
         if reply.error() != QNetworkReply.NetworkError.NoError:
             self.status_label.setText("Search failed")
             return
-        
+            
         try:
             data = json.loads(reply.readAll().data().decode("utf-8"))
-            items = data.get("items", [])
-            self._show_results(items)
+            self._display_results(data.get("items", []))
         except:
-            self.status_label.setText("Parse error")
-    
-    def _show_results(self, items):
+            self.status_label.setText("Invalid response")
+
+    def _create_status_icon(self, supported: bool) -> QIcon:
+        size = 64
+        pixmap = QPixmap(size, size)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Color & Shape
+        color = QColor(Colors.ACCENT_GREEN) if supported else QColor(Colors.ACCENT_RED)
+        bg_color = QColor(color)
+        bg_color.setAlpha(40) # Semi-transparent background
+        
+        # Draw Circle Background
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(bg_color))
+        painter.drawEllipse(4, 4, size-8, size-8)
+        
+        # Draw Border
+        painter.setPen(QPen(color, 3))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawEllipse(4, 4, size-8, size-8)
+        
+        # Draw Symbol
+        painter.setFont(QFont("Segoe UI Symbol", 28, QFont.Weight.Bold))
+        painter.setPen(color)
+        symbol = "✓" if supported else "✕"
+        painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, symbol)
+        
+        painter.end()
+        return QIcon(pixmap)
+
+    def _display_results(self, items):
         self.results_list.clear()
-        self.search_results = items
         self.selected_game = None
-        self.patch_btn.setEnabled(False)
+        self.btn_patch.setEnabled(False)
         
         if not items:
             self.status_label.setText("No results found")
             return
-        
+            
         for item in items:
             name = item.get("name", "Unknown")
             appid = str(item.get("id", ""))
-            available = appid in self.cached_app_ids
+            supported = appid in self.cached_app_ids
             
-            status = "✓" if available else "✗"
+            status_text = "Supported" if supported else "Not Indexed"
+            display_text = f"{name}\n{status_text} • ID: {appid}"
             
-            list_item = QListWidgetItem(f"{status}  {name}")
-            list_item.setData(Qt.ItemDataRole.UserRole, {"name": name, "appid": appid, "available": available})
+            list_item = QListWidgetItem(display_text)
+            list_item.setData(Qt.ItemDataRole.UserRole, {"name": name, "appid": appid, "supported": supported})
+            list_item.setIcon(self._create_status_icon(supported))
             
-            if available:
-                # Green background for available games (subtle tint)
-                list_item.setBackground(QColor(Colors.ACCENT_GREEN).lighter(160))
-                # Darker text for readability on green background? Or keep primary.
-                # Actually, lighter(160) of #22c55e (green) is very light green.
-                # Let's use a explicit semi-transparent green color for background to look like a "fill box"
-                # And keep text readable.
-                c = QColor(Colors.ACCENT_GREEN)
-                c.setAlpha(40) # 40/255 opacity
-                list_item.setBackground(c)
+            # Custom styling for supported vs unsupported
+            if supported:
                 list_item.setForeground(QColor(Colors.ACCENT_GREEN))
             else:
-                # Red text for unavailable
-                list_item.setForeground(QColor("#ff4444"))
+                list_item.setForeground(QColor(Colors.TEXT_SECONDARY))
                 
             self.results_list.addItem(list_item)
         
-        self.status_label.setText(f"{len(items)} results")
-    
-    def on_game_selected(self, current, previous=None):
-        if not current:
-            self.selected_game = None
-            self.patch_btn.setEnabled(False)
-            self.status_label.setText("Select a game")
-            return
-            
-        data = current.data(Qt.ItemDataRole.UserRole)
-        if data and data.get("available"):
+        self.status_label.setText(f"Found {len(items)} results")
+
+    def on_game_selected(self, item):
+        data = item.data(Qt.ItemDataRole.UserRole)
+        if not data: return
+        
+        if data["supported"]:
             self.selected_game = data
-            self.patch_btn.setEnabled(True)
+            self.btn_patch.setEnabled(True)
+            self.btn_patch.desc_text = f"Install patch for {data['name']}"
+            self.btn_patch.update() # Repaint
             self.status_label.setText(f"Selected: {data['name']}")
         else:
             self.selected_game = None
-            self.patch_btn.setEnabled(False)
-            self.status_label.setText("Patch not available for this game")
-    
+            self.btn_patch.setEnabled(False)
+            self.btn_patch.desc_text = "Patch unavailable for this game"
+            self.btn_patch.update()
+            self.status_label.setText("Game not supported")
+
     def do_patch(self):
-        if not self.selected_game:
-            return
+        if not self.selected_game: return
         
-        self.patch_btn.setEnabled(False)
-        self.progress.setMinimum(0)
-        self.progress.setMaximum(100)
+        self.btn_patch.setEnabled(False)
         self.progress.setValue(0)
         self.progress.show()
         
-        self.download_worker = LuaDownloadWorker(self.selected_game["appid"])
-        self.download_worker.finished.connect(self._on_download_done)
-        self.download_worker.progress.connect(self._on_download_progress)
-        self.download_worker.status.connect(lambda s: self.status_label.setText(s))
-        self.download_worker.error.connect(self._on_download_error)
-        self.download_worker.start()
-    
-    def _on_download_progress(self, downloaded, total):
-        if total > 0:
-            self.progress.setValue(int((downloaded / total) * 100))
-    
-    def _on_download_done(self, cache_path):
+        self.dl_worker = LuaDownloadWorker(self.selected_game["appid"])
+        self.dl_worker.finished.connect(self._on_patch_done)
+        self.dl_worker.progress.connect(lambda d,t: self.progress.setValue(int(d/t*100) if t>0 else 0))
+        self.dl_worker.status.connect(self.status_label.setText)
+        self.dl_worker.error.connect(self._on_patch_error)
+        self.dl_worker.start()
+
+    def _on_patch_done(self, path):
         try:
-            appid = self.selected_game["appid"]
-            name = self.selected_game["name"]
-            dest = os.path.join(STEAM_PLUGIN_DIR, f"{appid}.lua")
-            
+            dest = os.path.join(STEAM_PLUGIN_DIR, f"{self.selected_game['appid']}.lua")
             if not os.path.exists(STEAM_PLUGIN_DIR):
                 os.makedirs(STEAM_PLUGIN_DIR)
-            
-            shutil.copy2(cache_path, dest)
+            shutil.copy2(path, dest)
             
             self.progress.hide()
-            self.patch_btn.setEnabled(True)
-            self.status_label.setText(f"✓ Patched: {name}")
-            
-            QMessageBox.information(self, "Success", f"Patched {name}!\n\nRestart Steam to apply.")
-            
+            self.btn_patch.setEnabled(True)
+            self.status_label.setText("Patch Installed!")
+            QMessageBox.information(self, "Success", f"Patch installed for {self.selected_game['name']}")
         except Exception as e:
-            self._on_download_error(str(e))
-    
-    def _on_download_error(self, error):
+            self._on_patch_error(str(e))
+
+    def _on_patch_error(self, err):
         self.progress.hide()
-        self.patch_btn.setEnabled(True)
-        self.status_label.setText(f"Error: {error}")
-        QMessageBox.critical(self, "Error", f"Failed:\n{error}")
-    
+        self.btn_patch.setEnabled(True)
+        self.status_label.setText("Error")
+        QMessageBox.critical(self, "Error", str(err))
+
     def do_restart(self):
-        reply = QMessageBox.question(
-            self, "Restart Steam?",
-            "This will close Steam and all games.\n\nContinue?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        
-        if reply != QMessageBox.StandardButton.Yes:
+        if QMessageBox.question(self, "Restart Steam?", "Close Steam and all games?") != QMessageBox.StandardButton.Yes:
             return
         
-        self.status_label.setText("Restarting Steam...")
-        
         self.restart_worker = RestartWorker()
-        self.restart_worker.finished.connect(lambda s: self.status_label.setText(s))
-        self.restart_worker.error.connect(lambda e: self.status_label.setText(f"Error: {e}"))
+        self.restart_worker.finished.connect(self.status_label.setText)
         self.restart_worker.start()
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# ENTRY POINT
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def main():
+if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
     app.setStyleSheet(STYLESHEET)
     
+    # Set global font
     font = QFont("Segoe UI", 10)
     app.setFont(font)
     
@@ -744,7 +771,3 @@ def main():
     window.show()
     
     sys.exit(app.exec())
-
-
-if __name__ == "__main__":
-    main()
