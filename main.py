@@ -497,7 +497,6 @@ class SteamPatcherApp(QMainWindow):
                 border-radius: 6px;
                 padding: 8px;
                 margin: 2px 0;
-                color: {Colors.TEXT_PRIMARY};
             }}
             QListWidget::item:selected {{
                 background-color: {Colors.ACCENT_GREEN}40;  /* Green tint for selection */
@@ -624,11 +623,25 @@ class SteamPatcherApp(QMainWindow):
             available = appid in self.cached_app_ids
             
             status = "✓" if available else "✗"
-            color = Colors.ACCENT_GREEN if available else Colors.TEXT_SECONDARY
             
             list_item = QListWidgetItem(f"{status}  {name}")
             list_item.setData(Qt.ItemDataRole.UserRole, {"name": name, "appid": appid, "available": available})
-            list_item.setForeground(QColor(color if available else Colors.TEXT_PRIMARY))
+            
+            if available:
+                # Green background for available games (subtle tint)
+                list_item.setBackground(QColor(Colors.ACCENT_GREEN).lighter(160))
+                # Darker text for readability on green background? Or keep primary.
+                # Actually, lighter(160) of #22c55e (green) is very light green.
+                # Let's use a explicit semi-transparent green color for background to look like a "fill box"
+                # And keep text readable.
+                c = QColor(Colors.ACCENT_GREEN)
+                c.setAlpha(40) # 40/255 opacity
+                list_item.setBackground(c)
+                list_item.setForeground(QColor(Colors.ACCENT_GREEN))
+            else:
+                # Red text for unavailable
+                list_item.setForeground(QColor("#ff4444"))
+                
             self.results_list.addItem(list_item)
         
         self.status_label.setText(f"{len(items)} results")
