@@ -42,7 +42,7 @@ def get_resource_path(relative_path):
 # CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
-APP_VERSION = "1.0-beta"
+APP_VERSION = "1.0"
 WEBSERVER_BASE_URL = "https://webserver-ecru.vercel.app"
 GAMES_INDEX_URL = f"{WEBSERVER_BASE_URL}/api/games_index.json"
 LUA_FILE_URL = f"{WEBSERVER_BASE_URL}/lua/"
