@@ -16,3 +16,5 @@ venv/
 env/
 /All Games Files
 games_data.zip
+pygame.py
+test_logic.py

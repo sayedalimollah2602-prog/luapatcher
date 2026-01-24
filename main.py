@@ -28,10 +28,7 @@ from PyQt6.QtWidgets import (
     QGraphicsDropShadowEffect, QSizePolicy, QAbstractItemView
 )
 
-try:
-    import requests
-except ImportError:
-    requests = None
+
 
 
 def get_resource_path(relative_path):
@@ -300,55 +297,54 @@ STEAM_EXE_PATH = r"C:\Program Files (x86)\Steam\Steam.exe"
 # WORKER THREADS
 # ═══════════════════════════════════════════════════════════════════════════════
 
+from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
+from PyQt6.QtCore import QUrl
+
 class InitWorker(QThread):
     """Thread for initializing the game data"""
-    finished = pyqtSignal(str)  # Emits the lua_files_dir path
+    finished = pyqtSignal(str, set)  # Emits the lua_files_dir path and set of existing app IDs
     error = pyqtSignal(str)
     
     def run(self):
         try:
+            lua_dir = ""
+            existing_files = set()
+            
+            # Determine directory and extract if needed
             if getattr(sys, 'frozen', False):
                 zip_path = get_resource_path("games_data.zip")
-                if os.path.exists(zip_path):
-                    temp_dir = os.path.join(tempfile.gettempdir(), "SteamLuaPatcher_Cache")
+                temp_dir = os.path.join(tempfile.gettempdir(), "SteamLuaPatcher_Cache")
+                
+                # Only extract if valid directory doesn't exist
+                should_extract = True
+                if os.path.exists(temp_dir):
+                    # Basic check: if it has files, assume it's good (optimization)
+                    # In a real app we might check version/hash
+                    if len(os.listdir(temp_dir)) > 0:
+                        should_extract = False
+                
+                if should_extract and os.path.exists(zip_path):
                     if not os.path.exists(temp_dir):
                         os.makedirs(temp_dir)
                     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                         zip_ref.extractall(temp_dir)
-                    self.finished.emit(temp_dir)
-                else:
-                    self.finished.emit(get_resource_path("All Games Files"))
+                
+                lua_dir = temp_dir
             else:
-                self.finished.emit(get_resource_path("All Games Files"))
+                lua_dir = get_resource_path("All Games Files")
+            
+            # Index files for O(1) lookup
+            if os.path.exists(lua_dir):
+                for filename in os.listdir(lua_dir):
+                    if filename.endswith(".lua"):
+                        # Store just the ID part, assuming "12345.lua"
+                        existing_files.add(filename[:-4])
+            
+            self.finished.emit(lua_dir, existing_files)
+            
         except Exception as e:
             self.error.emit(str(e))
 
-
-class SearchWorker(QThread):
-    """Thread for searching Steam games"""
-    finished = pyqtSignal(list, int)  # results, search_id
-    error = pyqtSignal(str, int)  # error message, search_id
-    
-    def __init__(self, query: str, search_id: int):
-        super().__init__()
-        self.query = query
-        self.search_id = search_id
-    
-    def run(self):
-        try:
-            if requests is None:
-                self.error.emit("requests module not installed", self.search_id)
-                return
-                
-            url = "https://store.steampowered.com/api/storesearch"
-            params = {"term": self.query, "l": "english", "cc": "US"}
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            items = data.get("items", [])
-            self.finished.emit(items, self.search_id)
-        except Exception as e:
-            self.error.emit(str(e), self.search_id)
 
 
 class RestartWorker(QThread):
@@ -462,12 +458,17 @@ class SteamPatcherApp(QMainWindow):
         
         # Data
         self.lua_files_dir: Optional[str] = None
+        self.cached_files: set = set()
         self.search_results = []
         self.current_search_id = 0
         self.debounce_timer = QTimer()
         self.debounce_timer.setSingleShot(True)
         self.debounce_timer.timeout.connect(self.start_search)
-        self.search_worker: Optional[SearchWorker] = None
+        
+        # Network Manager
+        self.network_manager = QNetworkAccessManager()
+        self.network_manager.finished.connect(self._on_search_finished)
+        self.active_reply = None
         
         # Setup UI
         self._setup_ui()
@@ -624,9 +625,10 @@ class SteamPatcherApp(QMainWindow):
         self.init_worker.error.connect(self._on_init_error)
         self.init_worker.start()
     
-    def _on_init_complete(self, lua_dir: str):
+    def _on_init_complete(self, lua_dir: str, existing_files: set):
         """Called when initialization is complete"""
         self.lua_files_dir = lua_dir
+        self.cached_files = existing_files
         self.progress.hide()
         self.search_input.setEnabled(True)
         self.search_input.setFocus()
@@ -656,41 +658,75 @@ class SteamPatcherApp(QMainWindow):
             return
         
         self.current_search_id += 1
-        search_id = self.current_search_id
         
         self.set_status(f"SEARCHING: '{query.upper()}'...", CyberColors.NEON_YELLOW)
         
-        # Cancel previous search if running
-        if self.search_worker and self.search_worker.isRunning():
-            self.search_worker.terminate()
+        # Cancel previous request if any
+        if self.active_reply:
+            self.active_reply.abort()
+            self.active_reply = None
+            
+        url = QUrl("https://store.steampowered.com/api/storesearch")
+        query_items = [
+            ("term", query),
+            ("l", "english"),
+            ("cc", "US")
+        ]
         
-        self.search_worker = SearchWorker(query, search_id)
-        self.search_worker.finished.connect(self._on_search_complete)
-        self.search_worker.error.connect(self._on_search_error)
-        self.search_worker.start()
+        from PyQt6.QtCore import QUrlQuery
+        q = QUrlQuery()
+        for k, v in query_items:
+            q.addQueryItem(k, v)
+        url.setQuery(q)
+        
+        request = QNetworkRequest(url)
+        self.active_reply = self.network_manager.get(request)
+        self.active_reply.setProperty("search_id", self.current_search_id)
     
-    def _on_search_complete(self, items: list, search_id: int):
+    def _on_search_finished(self, reply: QNetworkReply):
         """Handle search results"""
+        reply.deleteLater()
+        self.active_reply = None
+        
+        if reply.error() == QNetworkReply.NetworkError.OperationCanceledError:
+            return  # Ignore cancelled requests
+            
+        search_id = reply.property("search_id")
         if search_id != self.current_search_id:
             return  # Stale result
-        
+            
+        if reply.error() != QNetworkReply.NetworkError.NoError:
+            self.set_status(f"NETWORK ERROR: {reply.errorString()}", CyberColors.NEON_RED)
+            return
+
+        try:
+            import json
+            data = json.loads(reply.readAll().data().decode("utf-8"))
+            items = data.get("items", [])
+            self._update_results_table(items)
+            
+        except Exception as e:
+            self.set_status(f"PARSE ERROR: {str(e)}", CyberColors.NEON_RED)
+            
+    def _update_results_table(self, items: list):
+        self.table.setUpdatesEnabled(False)
+        self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
+        
         self.search_results = items
         
         if not items:
             self.set_status("NO RESULTS FOUND", CyberColors.NEON_ORANGE)
+            self.table.setUpdatesEnabled(True)
+            self.table.setSortingEnabled(True)
             return
         
         for item in items:
             name = item.get("name", "Unknown")
             appid = str(item.get("id", ""))
             
-            # Check if lua file exists
-            if self.lua_files_dir:
-                lua_path = os.path.join(self.lua_files_dir, f"{appid}.lua")
-                exists = os.path.exists(lua_path)
-            else:
-                exists = False
+            # Use cached Set for O(1) lookup
+            exists = appid in self.cached_files
             
             status = "✓ AVAILABLE" if exists else "✗ MISSING"
             status_color = CyberColors.NEON_GREEN if exists else CyberColors.NEON_RED
@@ -698,11 +734,11 @@ class SteamPatcherApp(QMainWindow):
             row = self.table.rowCount()
             self.table.insertRow(row)
             
-            # Name - with word wrap and tooltip for long names
+            # Name
             name_item = QTableWidgetItem(name)
             name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             name_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter | Qt.TextFlag.TextWordWrap)
-            name_item.setToolTip(name)  # Show full name on hover
+            name_item.setToolTip(name)
             self.table.setItem(row, 0, name_item)
             
             # App ID
@@ -718,15 +754,11 @@ class SteamPatcherApp(QMainWindow):
             status_item.setForeground(QColor(status_color))
             self.table.setItem(row, 2, status_item)
         
-        # Resize rows to fit content
         self.table.resizeRowsToContents()
+        self.table.setUpdatesEnabled(True)
+        self.table.setSortingEnabled(True)
         self.set_status(f"FOUND {len(items)} RESULTS", CyberColors.NEON_GREEN)
-    
-    def _on_search_error(self, error: str, search_id: int):
-        """Handle search error"""
-        if search_id != self.current_search_id:
-            return
-        self.set_status(f"NETWORK ERROR: {error}", CyberColors.NEON_RED)
+
     
     def on_selection_change(self):
         """Handle table selection changes"""
