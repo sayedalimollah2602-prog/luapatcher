@@ -7,32 +7,40 @@
 #include <QDebug>
 #include <QWebEngineSettings>
 
+// Custom WebEnginePage to capture console messages
+class LoggingWebEnginePage : public QWebEnginePage {
+public:
+    explicit LoggingWebEnginePage(QObject* parent = nullptr) : QWebEnginePage(parent) {}
+
+protected:
+    void javaScriptConsoleMessage(JavaScriptConsoleMessageLevel level, const QString& message, int lineNumber, const QString& sourceID) override {
+        QString levelStr;
+        switch(level) {
+            case InfoMessageLevel: levelStr = "INFO"; break;
+            case WarningMessageLevel: levelStr = "WARN"; break;
+            case ErrorMessageLevel: levelStr = "ERROR"; break;
+            default: levelStr = "LOG"; break;
+        }
+        qDebug() << "[JS" << levelStr << "]" << message << "(Line" << lineNumber << ")";
+    }
+};
+
 LuaGenerationWorker::LuaGenerationWorker(const QString& appId, QObject* parent)
     : QObject(parent)
     , m_appId(appId)
-    , m_page(new QWebEnginePage(this))
+    , m_page(new LoggingWebEnginePage(this))
     , m_networkManager(new QNetworkAccessManager(this))
     , m_reply(nullptr)
     , m_pollTimer(new QTimer(this))
     , m_pollAttempts(0)
 {
     // Enable remote access and disable security for cross-origin requests
-    m_page->settings()->setAttribute(QWebEngineSettings::WebAttribute::WebSecurityEnabled, false);
-    m_page->settings()->setAttribute(QWebEngineSettings::WebAttribute::LocalContentCanAccessRemoteUrls, true);
-    m_page->settings()->setAttribute(QWebEngineSettings::WebAttribute::LocalContentCanAccessFileUrls, true);
+    m_page->settings()->setAttribute(QWebEngineSettings::WebSecurityEnabled, false);
+    m_page->settings()->setAttribute(QWebEngineSettings::LocalContentCanAccessRemoteUrls, true);
+    m_page->settings()->setAttribute(QWebEngineSettings::LocalContentCanAccessFileUrls, true);
 
-    // Forward JS console logs to qDebug
-    connect(m_page, &QWebEnginePage::javaScriptConsoleMessage, this, 
-        [](QWebEnginePage::JavaScriptConsoleMessageLevel level, const QString &message, int lineNumber, const QString &sourceID) {
-            QString levelStr;
-            switch(level) {
-                case QWebEnginePage::InfoMessageLevel: levelStr = "INFO"; break;
-                case QWebEnginePage::WarningMessageLevel: levelStr = "WARN"; break;
-                case QWebEnginePage::ErrorMessageLevel: levelStr = "ERROR"; break;
-                default: levelStr = "LOG"; break;
-            }
-            qDebug() << "[JS" << levelStr << "]" << message << "(Line" << lineNumber << ")";
-    });
+    connect(m_page, &QWebEnginePage::loadFinished, this, &LuaGenerationWorker::onPageLoadFinished);
+}
 
     connect(m_page, &QWebEnginePage::loadFinished, this, &LuaGenerationWorker::onPageLoadFinished);
 }
