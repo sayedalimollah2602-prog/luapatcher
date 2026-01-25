@@ -10,6 +10,23 @@ REM Create build directory
 mkdir build
 cd build
 
+REM Check for CMake
+where cmake >nul 2>&1
+if %errorLevel% neq 0 (
+    echo CMake not found!
+    if exist setup_build_env.bat (
+        echo Found environment setup script. Running it...
+        call setup_build_env.bat
+    ) else (
+        echo.
+        echo ERROR: CMake is not in your PATH.
+        echo Please run 'setup_build_environment.bat' as Administrator to install dependencies.
+        echo.
+        pause
+        exit /b 1
+    )
+)
+
 REM Configure with CMake
 echo Configuring with CMake...
 cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release ..

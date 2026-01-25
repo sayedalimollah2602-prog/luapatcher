@@ -19,12 +19,12 @@ void LuaDownloadWorker::run() {
     try {
         emit status("Downloading patch...");
         
-        QString url = Config::LUA_FILE_URL + m_appId + ".lua";
+        QString url = Config::luaFileUrl() + m_appId + ".lua";
         QString cachePath = QDir(Paths::getLocalCacheDir()).filePath(m_appId + ".lua");
         
         QNetworkAccessManager manager;
-        QUrl qurl(url);
-        QNetworkRequest request(qurl);
+        QUrl qurl{url};
+        QNetworkRequest request{qurl};
         request.setHeader(QNetworkRequest::UserAgentHeader, "SteamLuaPatcher/2.0");
         
         QEventLoop loop;

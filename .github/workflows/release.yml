@@ -1,26 +1,19 @@
-name: Release Build
+name: Build & Release
 
 on:
   push:
     branches: [ "main", "master" ]
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Release version (e.g., 1.0.0)'
-        required: true
-        type: string
-      changelog:
-        description: 'Changelog/Release notes (use " - " to separate items)'
-        required: false
-        type: string
-        default: 'Manual release'
+    # No inputs needed - manual runs are just for testing
 
 permissions:
   contents: write
 
+env:
+  QT_VERSION: '6.6.0'
+
 jobs:
-  build-and-release:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, 'release:')
+  build:
     runs-on: windows-latest
 
     steps:
@@ -28,116 +21,168 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Install Qt
-      uses: jurplel/install-qt-action@v3
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
       with:
-        version: '6.6.0'
-        host: 'windows'
-        target: 'desktop'
-        arch: 'win64_mingw'
-        modules: 'qtnetworkauth'
-        cache: true
-
-    - name: Setup MinGW
-      run: |
-        choco install mingw --version=11.2.0.07112021 --force -y
-        echo "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-      shell: pwsh
+        arch: x64
 
     - name: Setup CMake
       uses: jwlawson/actions-setup-cmake@v1.14
       with:
         cmake-version: '3.27.x'
 
-    - name: Configure CMake
-      run: |
-        mkdir build
-        cd build
-        cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release ..
-      shell: cmd
+    - name: Setup Ninja
+      uses: ashutoshvarma/setup-ninja@v1.1
 
-    - name: Build
-      run: |
-        cd build
-        cmake --build . --config Release
-      shell: cmd
+    - name: Cache Static Qt
+      id: cache-qt-static
+      uses: actions/cache@v4
+      with:
+        path: C:\Qt\Static
+        key: qt-static-${{ env.QT_VERSION }}-msvc-v6
+        restore-keys: |
+          qt-static-${{ env.QT_VERSION }}-msvc-
 
-    - name: Create Distribution Package
-      run: |
-        mkdir dist
-        copy build\SteamLuaPatcher.exe dist\
-        if exist logo.ico copy logo.ico dist\
-        cd dist
-        windeployqt SteamLuaPatcher.exe --release --no-translations
-      shell: cmd
-
-    - name: Create Installer (Optional - using NSIS)
-      run: |
-        echo "Skipping installer creation - direct exe distribution"
-      shell: cmd
-
-    - name: Package Release
-      run: |
-        cd dist
-        7z a ..\SteamLuaPatcher-Windows.zip *
-      shell: cmd
-
-    - name: Extract Version from Commit Message
-      id: get_info
+    - name: Download and Build Static Qt
+      if: steps.cache-qt-static.outputs.cache-hit != 'true'
       shell: pwsh
       run: |
-        # Check if this is a manual trigger
-        if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $version = "${{ github.event.inputs.version }}"
-            echo "VERSION=$version" >> $env:GITHUB_OUTPUT
-            echo "Manual trigger - Version: $version"
+        Write-Host "Downloading Qt ${{ env.QT_VERSION }} source..."
+        
+        # Install aqtinstall
+        pip install aqtinstall
+        
+        # Download Qt source (qtbase only)
+        New-Item -ItemType Directory -Force -Path "C:\Qt\Source"
+        aqt install-src windows ${{ env.QT_VERSION }} --outputdir "C:\Qt\Source" --archives qtbase
+        
+        # Navigate to qtbase source directory (it's inside Src/qtbase)
+        $qtbasePath = "C:\Qt\Source\${{ env.QT_VERSION }}\Src\qtbase"
+        if (-not (Test-Path $qtbasePath)) {
+          Write-Host "ERROR: qtbase not found at $qtbasePath"
+          Get-ChildItem "C:\Qt\Source" -Recurse -Depth 4 | Select-Object FullName
+          exit 1
+        }
+        
+        Set-Location $qtbasePath
+        Write-Host "Building from: $qtbasePath"
+        
+        # Verify configure.bat exists
+        if (-not (Test-Path "configure.bat")) {
+          Write-Host "ERROR: configure.bat not found!"
+          Get-ChildItem
+          exit 1
+        }
+        
+        # Configure Qt for static build with MSVC
+        Write-Host "Configuring Qt for static build..."
+        & cmd /c "configure.bat -release -static -static-runtime -prefix C:\Qt\Static\${{ env.QT_VERSION }} -opensource -confirm-license -nomake examples -nomake tests -schannel -no-opengl -no-feature-sql"
+        
+        if ($LASTEXITCODE -ne 0) {
+          Write-Host "Qt configure failed!"
+          exit 1
+        }
+        
+        Write-Host "Building Qt (this takes 1-2 hours)..."
+        cmake --build . --parallel
+        
+        if ($LASTEXITCODE -ne 0) {
+          Write-Host "Qt build failed!"
+          exit 1
+        }
+        
+        Write-Host "Installing Qt..."
+        cmake --install .
+        
+        Write-Host "Static Qt build complete!"
+
+    - name: Build SteamLuaPatcher (Static)
+      shell: pwsh
+      run: |
+        # Set Qt path
+        $env:CMAKE_PREFIX_PATH = "C:\Qt\Static\${{ env.QT_VERSION }}"
+        $env:Qt6_DIR = "C:\Qt\Static\${{ env.QT_VERSION }}"
+        
+        # Clean and create build directory
+        if (Test-Path build) { Remove-Item -Recurse -Force build }
+        New-Item -ItemType Directory -Force -Path build
+        Set-Location build
+        
+        Write-Host "Configuring CMake with static Qt..."
+        cmake -G "Ninja" `
+          -DCMAKE_BUILD_TYPE=Release `
+          -DBUILD_STATIC=ON `
+          -DCMAKE_PREFIX_PATH="C:\Qt\Static\${{ env.QT_VERSION }}" `
+          ..
+        
+        if ($LASTEXITCODE -ne 0) {
+          Write-Host "CMake configuration failed!"
+          exit 1
+        }
+        
+        Write-Host "Building..."
+        cmake --build . --config Release
+        
+        if ($LASTEXITCODE -ne 0) {
+          Write-Host "Build failed!"
+          exit 1
+        }
+
+    - name: Prepare Artifact
+      shell: pwsh
+      run: |
+        # Create dist folder
+        New-Item -ItemType Directory -Force -Path dist
+        
+        # Copy standalone exe
+        Copy-Item "build\SteamLuaPatcher.exe" "dist\"
+        
+        # Get file info
+        $exe = Get-Item "dist\SteamLuaPatcher.exe"
+        $sizeMB = [math]::Round($exe.Length / 1MB, 2)
+        Write-Host "Standalone executable size: $sizeMB MB"
+
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: SteamLuaPatcher-Standalone
+        path: dist/SteamLuaPatcher.exe
+        retention-days: 30
+
+    # Only create release if commit message contains "release:"
+    - name: Check for Release
+      id: check_release
+      if: github.event_name == 'push'
+      shell: pwsh
+      run: |
+        $msg = "${{ github.event.head_commit.message }}"
+        if ($msg -match "(?i)release:\s*v?([\d\.]+)") {
+          $version = $matches[1]
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          echo "IS_RELEASE=true" >> $env:GITHUB_OUTPUT
+          Write-Host "Release detected: v$version"
         } else {
-            # Extract from commit message
-            $msg = "${{ github.event.head_commit.message }}"
-            if ($msg -match "(?i)release:\s*v?([\d\.]+)") {
-                $version = $matches[1]
-                echo "VERSION=$version" >> $env:GITHUB_OUTPUT
-                echo "Commit trigger - Found version: $version"
-            } else {
-                echo "VERSION=latest" >> $env:GITHUB_OUTPUT
-                echo "No specific version found, using 'latest'"
-            }
+          echo "IS_RELEASE=false" >> $env:GITHUB_OUTPUT
+          Write-Host "Not a release commit"
         }
 
     - name: Generate Changelog
       id: changelog
+      if: steps.check_release.outputs.IS_RELEASE == 'true'
       shell: pwsh
       run: |
-        # Check if this is a manual trigger
-        if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $changelog = "${{ github.event.inputs.changelog }}"
-            if ($changelog) {
-                # Split by " - " if multiple items
-                $parts = $changelog -split " - "
-                $formattedLog = ""
-                foreach ($part in $parts) {
-                    $part = $part.Trim()
-                    if ($part) {
-                        $formattedLog += "- $part`n"
-                    }
-                }
-                $changelog = $formattedLog
-            } else {
-                $changelog = "- Manual release"
-            }
-            echo "Manual trigger changelog"
-        } else {
-            # Extract from commit message
-            $msg = "${{ github.event.head_commit.message }}"
-            $parts = $msg -split " - "
-            $changelog = ""
-            foreach ($part in $parts) {
-                if ($part -match "^release:") { continue }
-                $changelog += "- $part`n"
-            }
-            if (-not $changelog) {
-                $changelog = $msg
-            }
+        $msg = "${{ github.event.head_commit.message }}"
+        $parts = $msg -split " - "
+        $changelog = ""
+        foreach ($part in $parts) {
+          if ($part -match "^release:") { continue }
+          $part = $part.Trim()
+          if ($part) {
+            $changelog += "- $part`n"
+          }
+        }
+        if (-not $changelog) {
+          $changelog = "- Bug fixes and improvements"
         }
         
         # Escape for GitHub Actions output
@@ -145,24 +190,24 @@ jobs:
         echo "LOGS=$changelog" >> $env:GITHUB_OUTPUT
 
     - name: Create Release
+      if: steps.check_release.outputs.IS_RELEASE == 'true'
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: v${{ steps.get_info.outputs.VERSION }}
-        name: Release v${{ steps.get_info.outputs.VERSION }}
+        tag_name: v${{ steps.check_release.outputs.VERSION }}
+        name: Release v${{ steps.check_release.outputs.VERSION }}
         body: |
-          ## Changes
+          ## What's New
           ${{ steps.changelog.outputs.LOGS }}
           
-          ## Installation
-          1. Download `SteamLuaPatcher-Windows.zip`
-          2. Extract the archive
-          3. Run `SteamLuaPatcher.exe`
+          ## Download & Run
+          1. Download `SteamLuaPatcher.exe` below
+          2. Double-click to run - **no installation required!**
+          
+          > 📦 **This is a standalone executable** - no DLLs, no folders, just one file!
           
           ## Requirements
-          - Windows 10/11
-          - Visual C++ Redistributable (usually pre-installed)
+          - Windows 10/11 (64-bit)
         files: |
-          SteamLuaPatcher-Windows.zip
           dist/SteamLuaPatcher.exe
         draft: false
         prerelease: false

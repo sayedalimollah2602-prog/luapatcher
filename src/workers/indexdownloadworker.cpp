@@ -32,7 +32,8 @@ void IndexDownloadWorker::run() {
         emit progress("Syncing library...");
         
         QNetworkAccessManager manager;
-        QNetworkRequest request(QUrl(Config::GAMES_INDEX_URL));
+        QUrl requestUrl{Config::gamesIndexUrl()};
+        QNetworkRequest request{requestUrl};
         request.setHeader(QNetworkRequest::UserAgentHeader, "SteamLuaPatcher/2.0");
         
         QEventLoop loop;

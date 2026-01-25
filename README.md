@@ -11,18 +11,23 @@ A simple tool to search for Steam games, locate and copy corresponding Lua patch
 - Restart Steam
 - Modern UI
 
-## Usage
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. Run the application:
-   ```bash
-   python main.py
-   ```
+## Download
 
-## Building
-To build a standalone executable:
-```bash
-python build.py
-```
+Download the latest release from [Releases](../../releases). 
+
+**Just download `SteamLuaPatcher.exe` and double-click to run!** No installation needed.
+
+## Building from Source
+
+### Standard Build (with DLLs)
+1. Run `setup_build_environment.bat` as Administrator to install dependencies (Qt6, CMake, MinGW)
+2. Run `build.bat` to configure and build
+3. The executable + DLLs will be in the `dist` folder
+
+### Standalone Build (single .exe)
+1. Run `setup_build_environment.bat` as Administrator (if not already done)
+2. Run `build_static.bat` to build with static Qt
+3. A single standalone `SteamLuaPatcher.exe` will be in the `dist_static` folder
+
+> [!NOTE]
+> First static build takes 2-4 hours to compile Qt. Subsequent builds are fast.
