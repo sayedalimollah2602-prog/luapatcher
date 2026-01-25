@@ -84,10 +84,17 @@ jobs:
         # We need to include webengine explicitly sometimes or just let it auto-discover
         & $windeployqt --release --compiler-runtime --no-translations --no-opengl-sw "dist\SteamLuaPatcher.exe"
         
-    - name: Setup Inno Setup
-      uses: thirdwigger/inno-setup/action@v1.0.1
-      with:
-        path: setup.iss
+    - name: Install Inno Setup
+      shell: pwsh
+      run: |
+        choco install innosetup --no-progress
+        
+    - name: Compile Installer
+      shell: pwsh
+      run: |
+        # Inno Setup is installed to "C:\Program Files (x86)\Inno Setup 6"
+        $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+        & $iscc setup.iss
         
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
