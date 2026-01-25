@@ -15,8 +15,11 @@
 #include <QNetworkReply>
 
 class GlassButton;
+#include "utils/gameinfo.h"
+
 class LoadingSpinner;
 class IndexDownloadWorker;
+
 class LuaDownloadWorker;
 class RestartWorker;
 
@@ -31,7 +34,8 @@ protected:
     void paintEvent(QPaintEvent* event) override;
 
 private slots:
-    void onSyncDone(QSet<QString> appIds);
+    void onSyncDone(QList<GameInfo> games);
+
     void onSyncError(QString error);
     void onSearchChanged(const QString& text);
     void doSearch();
@@ -59,7 +63,8 @@ private:
     GlassButton* m_btnRestart;
 
     // Data
-    QSet<QString> m_cachedAppIds;
+    QList<GameInfo> m_supportedGames;
+
     QMap<QString, QString> m_selectedGame; // name, appid, supported
     
     // Network

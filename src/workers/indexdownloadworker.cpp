@@ -76,13 +76,16 @@ void IndexDownloadWorker::run() {
         reply->deleteLater();
         
         // Extract app IDs
-        QSet<QString> appIds;
-        QJsonArray arr = indexData["app_ids"].toArray();
+        // Extract games
+        QList<GameInfo> games;
+        QJsonArray arr = indexData["games"].toArray();
         for (const QJsonValue& val : arr) {
-            appIds.insert(val.toString());
+            QJsonObject obj = val.toObject();
+            games.append({obj["id"].toString(), obj["name"].toString()});
         }
         
-        emit finished(appIds);
+        emit finished(games);
+
         
     } catch (const std::exception& e) {
         emit error(QString::fromStdString(e.what()));

@@ -214,14 +214,20 @@ void MainWindow::startSync() {
     m_syncWorker->start();
 }
 
-void MainWindow::onSyncDone(QSet<QString> appIds) {
-    m_cachedAppIds = appIds;
+void MainWindow::onSyncDone(QList<GameInfo> games) {
+    m_supportedGames = games;
     m_spinner->stop();
     m_stack->setCurrentIndex(1); // List
-    m_statusLabel->setText(QString("Online • %L1 supported games")
-                          .arg(appIds.size()));
+    m_statusLabel->setText(QString("Online • %1 supported games")
+                          .arg(games.size()));
     m_searchInput->setFocus();
+    
+    // Trigger initial empty search to show list if needed, or just clear
+    if (!m_searchInput->text().isEmpty()) {
+        doSearch();
+    }
 }
+
 
 void MainWindow::onSyncError(QString error) {
     m_spinner->stop();
@@ -245,8 +251,24 @@ void MainWindow::doSearch() {
     if (query.isEmpty()) return;
     
     m_currentSearchId++;
-    m_statusLabel->setText("Searching Store...");
+    m_statusLabel->setText("Searching...");
     
+    // 1. Local Search (Instant)
+    QJsonArray localResults;
+    for (const auto& game : m_supportedGames) {
+        if (game.name.contains(query, Qt::CaseInsensitive) || game.id == query) {
+            QJsonObject item;
+            item["id"] = game.id;
+            item["name"] = game.name;
+            item["supported_local"] = true; // Marker for local result
+            localResults.append(item);
+        }
+    }
+    
+    // Display local results immediately
+    displayResults(localResults);
+    
+    // 2. Remote Search (Fallback/Supplement)
     if (m_activeReply) {
         m_activeReply->abort();
     }
@@ -263,25 +285,98 @@ void MainWindow::doSearch() {
     m_activeReply->setProperty("sid", m_currentSearchId);
 }
 
+
 void MainWindow::onSearchFinished(QNetworkReply* reply) {
     reply->deleteLater();
     m_activeReply = nullptr;
     
     if (reply->error() == QNetworkReply::OperationCanceledError) return;
-    if (reply->property("sid").toInt() != m_currentSearchId) return;
+    int sid = reply->property("sid").toInt();
+    if (sid != m_currentSearchId) return;
     
     if (reply->error() != QNetworkReply::NoError) {
-        m_statusLabel->setText("Search failed");
+        // Don't clear list if we have local results
+        if (m_resultsList->count() == 0) {
+            m_statusLabel->setText("Store search failed");
+        }
         return;
     }
     
     QByteArray data = reply->readAll();
     QJsonDocument doc = QJsonDocument::fromJson(data);
     QJsonObject obj = doc.object();
-    QJsonArray items = obj["items"].toArray();
+    QJsonArray remoteItems = obj["items"].toArray();
     
-    displayResults(items);
+    // Merge remote items with existing local items
+    // We strictly prefer local items because they are known supported
+    
+    QSet<QString> existingIds;
+    for (int i = 0; i < m_resultsList->count(); ++i) {
+        QMap<QString, QString> data = m_resultsList->item(i)->data(Qt::UserRole).value<QMap<QString, QString>>();
+        existingIds.insert(data["appid"]);
+    }
+    
+    bool addedRemote = false;
+    QJsonArray mergedItems;
+    
+    // Re-add existing (local) items to the list to keep order or just append new ones?
+    // Let's just append new remote ones for now to avoid flickering
+    
+    QList<QJsonObject> newItems;
+    for (const QJsonValue& val : remoteItems) {
+        QJsonObject item = val.toObject();
+        QString id = QString::number(item["id"].toInt());
+        
+        if (!existingIds.contains(id)) {
+            newItems.append(item);
+            addedRemote = true;
+        }
+    }
+    
+    if (addedRemote) {
+        // Append to UI
+        for (const auto& item : newItems) {
+           QString name = item["name"].toString("Unknown");
+           QString appid = QString::number(item["id"].toInt());
+           
+           // Check support again (in case it's in our support list but wasn't found by local string match?)
+           // Although local search should have found it if name matched.
+           // But maybe name in steam api differs from our index.
+           
+           bool supported = false;
+           for(const auto& g : m_supportedGames) {
+               if(g.id == appid) {
+                   supported = true; 
+                   break;
+               }
+           }
+           
+           QString statusText = supported ? "Supported" : "Not Indexed";
+           QString displayText = QString("%1\n%2 • ID: %3")
+                                .arg(name).arg(statusText).arg(appid);
+           
+           QListWidgetItem* listItem = new QListWidgetItem(displayText);
+           
+           QMap<QString, QString> data;
+           data["name"] = name;
+           data["appid"] = appid;
+           data["supported"] = supported ? "true" : "false";
+           listItem->setData(Qt::UserRole, QVariant::fromValue(data));
+           
+           listItem->setIcon(createStatusIcon(supported));
+           
+           if (supported) {
+               listItem->setForeground(Colors::toQColor(Colors::ACCENT_GREEN));
+           } else {
+               listItem->setForeground(Colors::toQColor(Colors::TEXT_SECONDARY));
+           }
+           
+           m_resultsList->addItem(listItem);
+        }
+        m_statusLabel->setText(QString("Found %1 results").arg(m_resultsList->count()));
+    }
 }
+
 
 QIcon MainWindow::createStatusIcon(bool supported) {
     int size = 64;
@@ -323,15 +418,29 @@ void MainWindow::displayResults(const QJsonArray& items) {
     m_btnPatch->setEnabled(false);
     
     if (items.isEmpty()) {
-        m_statusLabel->setText("No results found");
-        return;
+        // m_statusLabel->setText("No results found"); // Don't show this yet, might be waiting for remote
+        return; 
     }
     
     for (const QJsonValue& val : items) {
         QJsonObject item = val.toObject();
         QString name = item["name"].toString("Unknown");
-        QString appid = QString::number(item["id"].toInt());
-        bool supported = m_cachedAppIds.contains(appid);
+        QString appid = item.contains("id") ? (item["id"].isString() ? item["id"].toString() : QString::number(item["id"].toInt())) : "0";
+        bool supported = false;
+        
+        // If it came from local search, we know it's supported
+        if (item.contains("supported_local")) {
+            supported = true;
+        } else {
+            // Double check
+             for(const auto& g : m_supportedGames) {
+               if(g.id == appid) {
+                   supported = true; 
+                   break;
+               }
+           }
+        }
+
         
         QString statusText = supported ? "Supported" : "Not Indexed";
         QString displayText = QString("%1\n%2 • ID: %3")
