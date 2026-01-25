@@ -7,7 +7,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-# Option for static build
+# Option for static build (Default to OFF for dynamic build compatibility with WebEngine)
 option(BUILD_STATIC "Build with static Qt libraries" OFF)
 
 # Find Qt6 - Core components only

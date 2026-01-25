@@ -4,7 +4,6 @@ on:
   push:
     branches: [ "main", "master" ]
   workflow_dispatch:
-    # No inputs needed - manual runs are just for testing
 
 permissions:
   contents: write
@@ -33,86 +32,26 @@ jobs:
 
     - name: Setup Ninja
       uses: ashutoshvarma/setup-ninja@v1.1
-
-    - name: Cache Static Qt
-      id: cache-qt-static
-      uses: actions/cache@v4
+      
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
       with:
-        path: C:\Qt\Static
-        key: qt-static-${{ env.QT_VERSION }}-msvc-v6
-        restore-keys: |
-          qt-static-${{ env.QT_VERSION }}-msvc-
-
-    - name: Download and Build Static Qt
-      if: steps.cache-qt-static.outputs.cache-hit != 'true'
+        version: '6.6.0'
+        arch: 'win64_msvc2019_64'
+        modules: 'qtwebengine'
+        
+    - name: Build SteamLuaPatcher (Dynamic)
       shell: pwsh
       run: |
-        Write-Host "Downloading Qt ${{ env.QT_VERSION }} source..."
-        
-        # Install aqtinstall
-        pip install aqtinstall
-        
-        # Download Qt source (qtbase only)
-        New-Item -ItemType Directory -Force -Path "C:\Qt\Source"
-        aqt install-src windows ${{ env.QT_VERSION }} --outputdir "C:\Qt\Source" --archives qtbase
-        
-        # Navigate to qtbase source directory (it's inside Src/qtbase)
-        $qtbasePath = "C:\Qt\Source\${{ env.QT_VERSION }}\Src\qtbase"
-        if (-not (Test-Path $qtbasePath)) {
-          Write-Host "ERROR: qtbase not found at $qtbasePath"
-          Get-ChildItem "C:\Qt\Source" -Recurse -Depth 4 | Select-Object FullName
-          exit 1
-        }
-        
-        Set-Location $qtbasePath
-        Write-Host "Building from: $qtbasePath"
-        
-        # Verify configure.bat exists
-        if (-not (Test-Path "configure.bat")) {
-          Write-Host "ERROR: configure.bat not found!"
-          Get-ChildItem
-          exit 1
-        }
-        
-        # Configure Qt for static build with MSVC
-        Write-Host "Configuring Qt for static build..."
-        & cmd /c "configure.bat -release -static -static-runtime -prefix C:\Qt\Static\${{ env.QT_VERSION }} -opensource -confirm-license -nomake examples -nomake tests -schannel -no-opengl -no-feature-sql"
-        
-        if ($LASTEXITCODE -ne 0) {
-          Write-Host "Qt configure failed!"
-          exit 1
-        }
-        
-        Write-Host "Building Qt (this takes 1-2 hours)..."
-        cmake --build . --parallel
-        
-        if ($LASTEXITCODE -ne 0) {
-          Write-Host "Qt build failed!"
-          exit 1
-        }
-        
-        Write-Host "Installing Qt..."
-        cmake --install .
-        
-        Write-Host "Static Qt build complete!"
-
-    - name: Build SteamLuaPatcher (Static)
-      shell: pwsh
-      run: |
-        # Set Qt path
-        $env:CMAKE_PREFIX_PATH = "C:\Qt\Static\${{ env.QT_VERSION }}"
-        $env:Qt6_DIR = "C:\Qt\Static\${{ env.QT_VERSION }}"
-        
         # Clean and create build directory
         if (Test-Path build) { Remove-Item -Recurse -Force build }
         New-Item -ItemType Directory -Force -Path build
         Set-Location build
         
-        Write-Host "Configuring CMake with static Qt..."
+        Write-Host "Configuring CMake..."
         cmake -G "Ninja" `
           -DCMAKE_BUILD_TYPE=Release `
-          -DBUILD_STATIC=ON `
-          -DCMAKE_PREFIX_PATH="C:\Qt\Static\${{ env.QT_VERSION }}" `
+          -DBUILD_STATIC=OFF `
           ..
         
         if ($LASTEXITCODE -ne 0) {
@@ -128,28 +67,35 @@ jobs:
           exit 1
         }
 
-    - name: Prepare Artifact
+    - name: Deploy Qt Dependencies
       shell: pwsh
       run: |
         # Create dist folder
         New-Item -ItemType Directory -Force -Path dist
         
-        # Copy standalone exe
+        # Copy executable
         Copy-Item "build\SteamLuaPatcher.exe" "dist\"
         
-        # Get file info
-        $exe = Get-Item "dist\SteamLuaPatcher.exe"
-        $sizeMB = [math]::Round($exe.Length / 1MB, 2)
-        Write-Host "Standalone executable size: $sizeMB MB"
-
+        # Run windeployqt
+        $windeployqt = "windeployqt.exe" 
+        # (windeployqt is in path due to install-qt-action)
+        
+        Write-Host "Running windeployqt..."
+        # We need to include webengine explicitly sometimes or just let it auto-discover
+        & $windeployqt --release --compiler-runtime --no-translations --no-opengl-sw "dist\SteamLuaPatcher.exe"
+        
+    - name: Setup Inno Setup
+      uses: thirdwigger/inno-setup/action@v1.0.1
+      with:
+        path: setup.iss
+        
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: SteamLuaPatcher-Standalone
-        path: dist/SteamLuaPatcher.exe
+        name: SteamLuaPatcher-Installer
+        path: dist/SteamLuaPatcher_Setup.exe
         retention-days: 30
 
-    # Only create release if commit message contains "release:"
     - name: Check for Release
       id: check_release
       if: github.event_name == 'push'
@@ -199,16 +145,12 @@ jobs:
           ## What's New
           ${{ steps.changelog.outputs.LOGS }}
           
-          ## Download & Run
-          1. Download `SteamLuaPatcher.exe` below
-          2. Double-click to run - **no installation required!**
-          
-          > 📦 **This is a standalone executable** - no DLLs, no folders, just one file!
-          
-          ## Requirements
-          - Windows 10/11 (64-bit)
+          ## Download & Install
+          1. Download `SteamLuaPatcher_Setup.exe` below
+          2. Run the installer
+          3. Launch via Desktop Shortcut
         files: |
-          dist/SteamLuaPatcher.exe
+          dist/SteamLuaPatcher_Setup.exe
         draft: false
         prerelease: false
       env:
