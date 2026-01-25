@@ -48,6 +48,7 @@ QListWidget::item {
     padding: 12px;
     margin-bottom: 8px;
     color: %1;
+    word-wrap: break-word;
 }
 QListWidget::item:hover {
     background-color: %5;

@@ -102,6 +102,8 @@ void MainWindow::initUI() {
     m_statusLabel = new QLabel("Initializing...");
     m_statusLabel->setStyleSheet(QString("color: %1; font-size: 13px;")
                                 .arg(Colors::TEXT_SECONDARY));
+    m_statusLabel->setWordWrap(true);
+    m_statusLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
     leftCol->addWidget(m_statusLabel);
     
     leftCol->addStretch();
@@ -175,6 +177,9 @@ void MainWindow::initUI() {
     // Results Page
     m_resultsList = new QListWidget();
     m_resultsList->setIconSize(QSize(40, 40));
+    m_resultsList->setWordWrap(true);
+    m_resultsList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_resultsList->setTextElideMode(Qt::ElideNone);
     connect(m_resultsList, &QListWidget::itemPressed,
             this, &MainWindow::onGameSelected);
     m_stack->addWidget(m_resultsList);
