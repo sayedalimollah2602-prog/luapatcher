@@ -16,11 +16,13 @@
 
 class GlassButton;
 #include "utils/gameinfo.h"
+#include "workers/luagenerationworker.h"
 
 class LoadingSpinner;
 class IndexDownloadWorker;
 
 class LuaDownloadWorker;
+class LuaGenerationWorker;
 class RestartWorker;
 
 class MainWindow : public QMainWindow {
@@ -44,6 +46,12 @@ private slots:
     void doPatch();
     void onPatchDone(QString path);
     void onPatchError(QString error);
+    
+    void doGenerate();
+    void onGenerationFinished(QString path);
+    void onGenerationError(QString error);
+    void onGenerationStatus(QString status);
+
     void doRestart();
 
 private:
@@ -60,6 +68,7 @@ private:
     QListWidget* m_resultsList;
     QProgressBar* m_progress;
     GlassButton* m_btnPatch;
+    GlassButton* m_btnGenerate;
     GlassButton* m_btnRestart;
 
     // Data

@@ -3,6 +3,7 @@
 #include "loadingspinner.h"
 #include "workers/indexdownloadworker.h"
 #include "workers/luadownloadworker.h"
+#include "workers/luagenerationworker.h"
 #include "workers/restartworker.h"
 #include "utils/colors.h"
 #include "utils/paths.h"
@@ -29,6 +30,7 @@ MainWindow::MainWindow(QWidget* parent)
     , m_activeReply(nullptr)
     , m_currentSearchId(0)
     , m_syncWorker(nullptr)
+    , m_genWorker(nullptr)
     , m_dlWorker(nullptr)
     , m_restartWorker(nullptr)
 {
@@ -111,8 +113,16 @@ void MainWindow::initUI() {
                                  "Install Lua patch for selected game",
                                  Colors::ACCENT_GREEN);
     m_btnPatch->setEnabled(false);
+    m_btnPatch->setEnabled(false);
     connect(m_btnPatch, &QPushButton::clicked, this, &MainWindow::doPatch);
     leftCol->addWidget(m_btnPatch);
+
+    m_btnGenerate = new GlassButton("⚡", "Generate Lua",
+                                    "Generate patch for unsupported game",
+                                    Colors::ACCENT_ORANGE);
+    m_btnGenerate->setVisible(false);
+    connect(m_btnGenerate, &QPushButton::clicked, this, &MainWindow::doGenerate);
+    leftCol->addWidget(m_btnGenerate);
     
     m_btnRestart = new GlassButton("↻", "Restart Steam",
                                    "Apply changes by restarting Steam",
@@ -476,20 +486,34 @@ void MainWindow::onGameSelected(QListWidgetItem* item) {
     
     if (data["supported"] == "true") {
         m_selectedGame = data;
+        m_btnPatch->setVisible(true);
         m_btnPatch->setEnabled(true);
         m_btnPatch->setDescription(QString("Install patch for %1")
                                   .arg(data["name"]));
+        
+        m_btnGenerate->setVisible(false);
         m_statusLabel->setText(QString("Selected: %1").arg(data["name"]));
     } else {
-        m_selectedGame.clear();
-        m_btnPatch->setEnabled(false);
-        m_btnPatch->setDescription("Patch unavailable for this game");
-        m_statusLabel->setText("Game not supported");
+        m_selectedGame = data; // Keep selected even if not supported for generation
+        m_btnPatch->setVisible(false);
+        
+        m_btnGenerate->setVisible(true);
+        m_btnGenerate->setEnabled(true);
+        m_btnGenerate->setDescription(QString("Generate patch for %1").arg(data["name"]));
+        
+        m_statusLabel->setText("Game not in index - Generation Available");
     }
 }
 
 void MainWindow::doPatch() {
     if (m_selectedGame.isEmpty()) return;
+    
+    // Check if we have a generated local file
+    if (m_selectedGame.contains("local_patch_path")) {
+        QString path = m_selectedGame["local_patch_path"];
+        onPatchDone(path);
+        return;
+    }
     
     m_btnPatch->setEnabled(false);
     m_progress->setValue(0);
@@ -555,4 +579,52 @@ void MainWindow::doRestart() {
     connect(m_restartWorker, &RestartWorker::finished,
             m_statusLabel, &QLabel::setText);
     m_restartWorker->start();
+}
+
+void MainWindow::doGenerate() {
+    if (m_selectedGame.isEmpty()) return;
+
+    m_btnGenerate->setEnabled(false);
+    m_progress->setValue(0); // Indeterminate
+    m_progress->setRange(0, 0);
+    m_progress->show();
+
+    if (m_genWorker) {
+        m_genWorker->deleteLater();
+    }
+    
+    m_genWorker = new LuaGenerationWorker(m_selectedGame["appid"], this);
+    connect(m_genWorker, &LuaGenerationWorker::finished,
+            this, &MainWindow::onGenerationFinished);
+    connect(m_genWorker, &LuaGenerationWorker::error,
+            this, &MainWindow::onGenerationError);
+    connect(m_genWorker, &LuaGenerationWorker::status,
+            this, &MainWindow::onGenerationStatus);
+    
+    m_genWorker->start();
+}
+
+void MainWindow::onGenerationFinished(QString path) {
+    m_progress->hide();
+    m_progress->setRange(0, 100);
+    
+    m_btnGenerate->setVisible(false);
+    m_btnPatch->setVisible(true);
+    m_btnPatch->setEnabled(true);
+    m_btnPatch->setDescription("Install generated patch");
+    
+    m_selectedGame["local_patch_path"] = path;
+    m_statusLabel->setText("Generation Complete! Ready to Patch.");
+}
+
+void MainWindow::onGenerationError(QString error) {
+    m_progress->hide();
+    m_progress->setRange(0, 100);
+    m_btnGenerate->setEnabled(true);
+    m_statusLabel->setText("Generation Failed");
+    QMessageBox::critical(this, "Generation Error", error);
+}
+
+void MainWindow::onGenerationStatus(QString status) {
+    m_statusLabel->setText(status);
 }

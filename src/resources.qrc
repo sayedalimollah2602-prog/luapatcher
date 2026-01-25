@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/">
+        <file>resources/generator.js</file>
+    </qresource>
+</RCC>

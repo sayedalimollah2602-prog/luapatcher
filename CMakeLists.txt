@@ -11,7 +11,7 @@ set(CMAKE_AUTOUIC ON)
 option(BUILD_STATIC "Build with static Qt libraries" OFF)
 
 # Find Qt6 - Core components only
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network WebEngineWidgets)
 
 # Application icon resource (optional)
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/resources/app.rc")
@@ -31,6 +31,7 @@ set(SOURCES
     src/workers/restartworker.cpp
     src/utils/paths.cpp
     src/utils/colors.cpp
+    src/resources.qrc
 )
 
 set(HEADERS
@@ -63,6 +64,7 @@ target_link_libraries(SteamLuaPatcher PRIVATE
     Qt6::Gui
     Qt6::Widgets
     Qt6::Network
+    Qt6::WebEngineWidgets
 )
 
 # Static build configuration
