@@ -4,7 +4,7 @@
 #include <QString>
 
 namespace Config {
-    const QString APP_VERSION = "1.0";
+    const QString APP_VERSION = "1.1.0";
     const QString WEBSERVER_BASE_URL = "https://webserver-ecru.vercel.app";
     
     // Use inline functions to avoid static initialization issues
