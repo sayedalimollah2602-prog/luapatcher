@@ -166,28 +166,61 @@ jobs:
           Write-Host "Not a release commit"
         }
 
+    - name: Get last tag for changelog
+      id: last_tag
+      if: steps.check_release.outputs.IS_RELEASE == 'true'
+      shell: pwsh
+      run: |
+        $lastTag = git describe --tags --abbrev=0 2>$null
+        if ($lastTag) {
+          echo "LAST_TAG=$lastTag" >> $env:GITHUB_OUTPUT
+          Write-Host "Last tag: $lastTag"
+        } else {
+          echo "LAST_TAG=" >> $env:GITHUB_OUTPUT
+          Write-Host "No previous tags found"
+        }
+
     - name: Generate Changelog
       id: changelog
       if: steps.check_release.outputs.IS_RELEASE == 'true'
       shell: pwsh
       run: |
-        $msg = "${{ github.event.head_commit.message }}"
-        $parts = $msg -split " - "
-        $changelog = ""
-        foreach ($part in $parts) {
-          if ($part -match "^release:") { continue }
-          $part = $part.Trim()
-          if ($part) {
-            $changelog += "- $part`n"
-          }
-        }
-        if (-not $changelog) {
-          $changelog = "- Bug fixes and improvements"
+        Write-Host "Generating changelog..."
+        
+        # Get commits since last tag (excluding release and chore commits)
+        $lastTag = "${{ steps.last_tag.outputs.LAST_TAG }}"
+        
+        if ($lastTag) {
+          $commits = git log --pretty=format:"%s" "$lastTag..HEAD"
+        } else {
+          $commits = git log --pretty=format:"%s" HEAD
         }
         
-        # Escape for GitHub Actions output
-        $changelog = $changelog -replace '%', '%25' -replace '\n', '%0A' -replace '\r', '%0D'
-        echo "LOGS=$changelog" >> $env:GITHUB_OUTPUT
+        # Filter and format commits
+        $changelog = ""
+        foreach ($commit in $commits -split "`n") {
+          # Skip release commits, chore commits, and empty lines
+          if ($commit -match "^release:" -or $commit -match "^chore:" -or [string]::IsNullOrWhiteSpace($commit)) {
+            continue
+          }
+          $changelog += "- $commit`n"
+        }
+        
+        # Fallback if no commits found
+        if ([string]::IsNullOrWhiteSpace($changelog)) {
+          $changelog = "- Bug fixes and improvements`n"
+        }
+        
+        Write-Host "Generated changelog:"
+        Write-Host $changelog
+        
+        # Save to file instead of using escaped output
+        $changelog | Out-File -FilePath changelog.txt -Encoding utf8 -NoNewline
+        
+        # Also set as output using multiline string syntax
+        "LOGS<<EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        $changelog | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        "EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
     - name: Create Release
       if: steps.check_release.outputs.IS_RELEASE == 'true'
@@ -202,8 +235,6 @@ jobs:
           ## Download & Run
           1. Download `SteamLuaPatcher.exe` below
           2. Double-click to run - **no installation required!**
-          
-          > 📦 **This is a standalone executable** - no DLLs, no folders, just one file!
           
           ## Requirements
           - Windows 10/11 (64-bit)
