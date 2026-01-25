@@ -46,3 +46,4 @@ qrc_*.cpp
 *.tmp
 *.bak
 *.backup
+/webserver/games
