@@ -35,9 +35,9 @@ LuaGenerationWorker::LuaGenerationWorker(const QString& appId, QObject* parent)
     , m_pollAttempts(0)
 {
     // Enable remote access and disable security for cross-origin requests
-    m_page->settings()->setAttribute(QWebEngineSettings::WebAttribute::WebSecurityEnabled, false);
-    m_page->settings()->setAttribute(QWebEngineSettings::WebAttribute::LocalContentCanAccessRemoteUrls, true);
-    m_page->settings()->setAttribute(QWebEngineSettings::WebAttribute::LocalContentCanAccessFileUrls, true);
+    // Note: WebSecurityEnabled was removed in Qt6. LocalContentCanAccessRemoteUrls is sufficient for our needs.
+    m_page->settings()->setAttribute(QWebEngineSettings::LocalContentCanAccessRemoteUrls, true);
+    m_page->settings()->setAttribute(QWebEngineSettings::LocalContentCanAccessFileUrls, true);
 
     connect(m_page, &QWebEnginePage::loadFinished, this, &LuaGenerationWorker::onPageLoadFinished);
 }
