@@ -38,7 +38,7 @@ jobs:
       with:
         version: '6.6.0'
         arch: 'win64_msvc2019_64'
-        modules: 'qtwebengine qtwebchannel qtpositioning qtdeclarative'
+        modules: 'qtwebengine qtwebchannel qtpositioning'
         
     - name: Build SteamLuaPatcher (Dynamic)
       shell: pwsh
