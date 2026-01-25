@@ -13,6 +13,7 @@ const QString Colors::TEXT_SECONDARY = "#94A3B8";
 const QString Colors::ACCENT_BLUE = "#3B82F6";
 const QString Colors::ACCENT_PURPLE = "#8B5CF6";
 const QString Colors::ACCENT_GREEN = "#10B981";
+const QString Colors::ACCENT_ORANGE = "#F59E0B";
 const QString Colors::ACCENT_RED = "#EF4444";
 
 QColor Colors::toQColor(const QString& colorStr) {

@@ -23,6 +23,7 @@ public:
     static const QString ACCENT_BLUE;
     static const QString ACCENT_PURPLE;
     static const QString ACCENT_GREEN;
+    static const QString ACCENT_ORANGE;
     static const QString ACCENT_RED;
     
     // Helper to convert string to QColor

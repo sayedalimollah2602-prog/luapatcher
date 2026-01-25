@@ -87,6 +87,7 @@ private:
     // Workers
     IndexDownloadWorker* m_syncWorker;
     LuaDownloadWorker* m_dlWorker;
+    LuaGenerationWorker* m_genWorker;
     RestartWorker* m_restartWorker;
 };
 
