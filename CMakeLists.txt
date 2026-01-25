@@ -28,6 +28,7 @@ set(SOURCES
     src/loadingspinner.cpp
     src/workers/indexdownloadworker.cpp
     src/workers/luadownloadworker.cpp
+    src/workers/luagenerationworker.cpp
     src/workers/restartworker.cpp
     src/utils/paths.cpp
     src/utils/colors.cpp
@@ -40,6 +41,7 @@ set(HEADERS
     src/loadingspinner.h
     src/workers/indexdownloadworker.h
     src/workers/luadownloadworker.h
+    src/workers/luagenerationworker.h
     src/workers/restartworker.h
     src/utils/paths.h
     src/utils/colors.h
