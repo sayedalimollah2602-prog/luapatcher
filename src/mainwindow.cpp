@@ -131,8 +131,10 @@ void MainWindow::initUI() {
     
     // Creator
     QLabel* creatorLabel = new QLabel(
-        "<a href=\"https://github.com/sayedalimollah2602-prog\" "
-        "style=\"color: #94A3B8; text-decoration: none;\">created by leVI</a>");
+        "created by <a href=\"https://github.com/sayedalimollah2602-prog\" "
+        "style=\"color: #94A3B8; text-decoration: none;\">leVI</a> & "
+        "<a href=\"https://github.com/raxnmint\" "
+        "style=\"color: #94A3B8; text-decoration: none;\">raxnmint</a>");
     creatorLabel->setStyleSheet("font-size: 11px;");
     creatorLabel->setAlignment(Qt::AlignCenter);
     creatorLabel->setOpenExternalLinks(true);
