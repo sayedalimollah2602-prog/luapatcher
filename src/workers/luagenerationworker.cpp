@@ -5,6 +5,7 @@
 #include <QStandardPaths>
 #include <QDir>
 #include <QDebug>
+#include <QWebEngineSettings>
 
 LuaGenerationWorker::LuaGenerationWorker(const QString& appId, QObject* parent)
     : QObject(parent)
@@ -12,12 +13,35 @@ LuaGenerationWorker::LuaGenerationWorker(const QString& appId, QObject* parent)
     , m_page(new QWebEnginePage(this))
     , m_networkManager(new QNetworkAccessManager(this))
     , m_reply(nullptr)
+    , m_pollTimer(new QTimer(this))
+    , m_pollAttempts(0)
 {
+    // Enable remote access and disable security for cross-origin requests
+    m_page->settings()->setAttribute(QWebEngineSettings::WebAttribute::WebSecurityEnabled, false);
+    m_page->settings()->setAttribute(QWebEngineSettings::WebAttribute::LocalContentCanAccessRemoteUrls, true);
+    m_page->settings()->setAttribute(QWebEngineSettings::WebAttribute::LocalContentCanAccessFileUrls, true);
+
+    // Forward JS console logs to qDebug
+    connect(m_page, &QWebEnginePage::javaScriptConsoleMessage, this, 
+        [](QWebEnginePage::JavaScriptConsoleMessageLevel level, const QString &message, int lineNumber, const QString &sourceID) {
+            QString levelStr;
+            switch(level) {
+                case QWebEnginePage::InfoMessageLevel: levelStr = "INFO"; break;
+                case QWebEnginePage::WarningMessageLevel: levelStr = "WARN"; break;
+                case QWebEnginePage::ErrorMessageLevel: levelStr = "ERROR"; break;
+                default: levelStr = "LOG"; break;
+            }
+            qDebug() << "[JS" << levelStr << "]" << message << "(Line" << lineNumber << ")";
+    });
+
     connect(m_page, &QWebEnginePage::loadFinished, this, &LuaGenerationWorker::onPageLoadFinished);
 }
 
 LuaGenerationWorker::~LuaGenerationWorker()
 {
+    if (m_pollTimer) {
+        m_pollTimer->stop();
+    }
     if (m_reply) {
         m_reply->abort();
         m_reply->deleteLater();
@@ -54,16 +78,67 @@ void LuaGenerationWorker::runGeneration()
     QString scriptSource = QString::fromUtf8(scriptFile.readAll());
     scriptFile.close();
 
-    // Inject and run
+    // 1. Inject Mock DOM Elements
+    // generator.js expects #gid (input), #go (button), #msg, #actions, #dl, #open to exist.
+    // If they don't, it crashes immediately.
+    QString mockDomScript = R"(
+        (function() {
+            console.log("Injecting Mock DOM for generator.js compatibility...");
+            if (!document.getElementById('gid')) {
+                var container = document.createElement('div');
+                container.id = 'mock-container';
+                container.style.display = 'none';
+                container.innerHTML = `
+                    <input id="gid" value="">
+                    <button id="go"></button>
+                    <div id="msg"></div>
+                    <div id="actions">
+                        <button id="dl"></button>
+                        <button id="open"></button>
+                    </div>
+                `;
+                document.body.appendChild(container);
+            }
+        })();
+    )";
+    
+    // Run mock injection first
+    m_page->runJavaScript(mockDomScript);
+
+    // 2. Inject and run the actual generator
     m_page->runJavaScript(scriptSource);
     
-    // Call our wrapper
+    // 3. Call our wrapper with Promise handling
+    // IMPORTANT: generateLua() is an async function that returns a Promise.
+    // Qt's runJavaScript callback receives the Promise object, not the resolved value.
+    // We need to handle the Promise in JS and store the result in a global variable,
+    // then poll for it from C++.
     emit status("Generating Lua link...");
-    QString code = QString("window.generateLua('%1');").arg(m_appId);
     
-    m_page->runJavaScript(code, [this](const QVariant& result) {
-        onJsResult(result);
-    });
+    QString promiseHandlerCode = QString(R"(
+        (function() {
+            window.__luaGenerationResult = null;
+            window.__luaGenerationError = null;
+            window.__luaGenerationDone = false;
+            
+            window.generateLua('%1')
+                .then(function(url) {
+                    console.log('Promise resolved with URL:', url);
+                    window.__luaGenerationResult = url;
+                    window.__luaGenerationDone = true;
+                })
+                .catch(function(err) {
+                    console.error('Promise rejected:', err);
+                    window.__luaGenerationError = err ? err.toString() : 'Unknown error';
+                    window.__luaGenerationDone = true;
+                });
+        })();
+    )").arg(m_appId);
+    
+    m_page->runJavaScript(promiseHandlerCode);
+    
+    // 4. Start polling for the result
+    startPolling();
 }
 
 void LuaGenerationWorker::onJsResult(const QVariant& result)
@@ -117,4 +192,54 @@ void LuaGenerationWorker::onDownloadFinished()
     file.close();
 
     emit finished(filePath);
+}
+
+void LuaGenerationWorker::startPolling()
+{
+    m_pollAttempts = 0;
+    connect(m_pollTimer, &QTimer::timeout, this, &LuaGenerationWorker::pollResult);
+    m_pollTimer->start(100); // Poll every 100ms
+}
+
+void LuaGenerationWorker::pollResult()
+{
+    m_pollAttempts++;
+    
+    // Check if we've exceeded max attempts (30 seconds = 300 attempts @ 100ms)
+    if (m_pollAttempts > 300) {
+        m_pollTimer->stop();
+        emit error("Generation timed out: Script did not return a URL in 30 seconds");
+        return;
+    }
+    
+    // Check if the Promise has completed
+    m_page->runJavaScript("window.__luaGenerationDone", [this](const QVariant& doneResult) {
+        bool done = doneResult.toBool();
+        if (!done) {
+            return; // Still processing, wait for next poll
+        }
+        
+        // Stop polling
+        m_pollTimer->stop();
+        
+        // Check for error first
+        m_page->runJavaScript("window.__luaGenerationError", [this](const QVariant& errorResult) {
+            QString errorMsg = errorResult.toString();
+            if (!errorMsg.isEmpty() && errorMsg != "null") {
+                emit error("Generation failed: " + errorMsg);
+                return;
+            }
+            
+            // Get the result
+            m_page->runJavaScript("window.__luaGenerationResult", [this](const QVariant& urlResult) {
+                QString url = urlResult.toString();
+                if (url.isEmpty() || url == "null") {
+                    emit error("Generation failed: No URL returned");
+                    return;
+                }
+                
+                onJsResult(url);
+            });
+        });
+    });
 }

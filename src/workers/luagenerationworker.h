@@ -6,6 +6,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QFile>
+#include <QTimer>
 
 class LuaGenerationWorker : public QObject
 {
@@ -25,15 +26,19 @@ private slots:
     void onPageLoadFinished(bool success);
     void onJsResult(const QVariant& result);
     void onDownloadFinished();
+    void pollResult();
 
 private:
     QString m_appId;
     QWebEnginePage* m_page;
     QNetworkAccessManager* m_networkManager;
     QNetworkReply* m_reply;
+    QTimer* m_pollTimer;
+    int m_pollAttempts;
     
     void runGeneration();
     void downloadFile(const QString& url);
+    void startPolling();
 };
 
 #endif // LUAGENERATIONWORKER_H

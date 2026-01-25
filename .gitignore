@@ -47,3 +47,4 @@ qrc_*.cpp
 *.bak
 *.backup
 /webserver/games
+/lua-gen
