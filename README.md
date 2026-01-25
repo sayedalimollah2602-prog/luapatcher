@@ -79,7 +79,3 @@ Creates a single `.exe` file with no external dependencies.
     -   `generate_index.py`: Fetches Game IDs and Names from Steam APIs to generate `games_index.json`.
 -   **`resources/`**: Icons and assets.
 
-
-## 📄 License
-
-This project is open-source. Feel free to fork and contribute!

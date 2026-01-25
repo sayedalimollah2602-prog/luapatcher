@@ -513,18 +513,39 @@ void MainWindow::doPatch() {
 
 void MainWindow::onPatchDone(QString path) {
     try {
-        QString dest = QDir(Config::STEAM_PLUGIN_DIR)
-                      .filePath(m_selectedGame["appid"] + ".lua");
-        
-        QDir dir;
-        if (!dir.exists(Config::STEAM_PLUGIN_DIR)) {
-            dir.mkpath(Config::STEAM_PLUGIN_DIR);
+        QStringList targetDirs = Config::getAllSteamPluginDirs();
+        if (targetDirs.isEmpty()) {
+            targetDirs.append(Config::getSteamPluginDir());
+        }
+
+        bool atLeastOneSuccess = false;
+        QString lastError;
+
+        for (const QString& pluginDir : targetDirs) {
+            QString dest = QDir(pluginDir).filePath(m_selectedGame["appid"] + ".lua");
+            
+            QDir dir;
+            if (!dir.exists(pluginDir)) {
+                dir.mkpath(pluginDir);
+            }
+            
+            if (QFile::exists(dest)) {
+                QFile::remove(dest);
+            }
+            
+            if (QFile::copy(path, dest)) {
+                atLeastOneSuccess = true;
+            } else {
+                lastError = "Failed to copy patch file to " + pluginDir;
+            }
+        }
+
+        if (!atLeastOneSuccess) {
+             throw std::runtime_error(lastError.toStdString());
         }
         
-        QFile::remove(dest);
-        if (!QFile::copy(path, dest)) {
-            throw std::runtime_error("Failed to copy patch file");
-        }
+        // Clean up the downloaded file after copying to all destinations
+        QFile::remove(path);
         
         m_progress->hide();
         m_btnPatch->setEnabled(true);
