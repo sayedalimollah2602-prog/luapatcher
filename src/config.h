@@ -7,8 +7,14 @@
 #include <QFileInfo>
 
 namespace Config {
-    const QString APP_VERSION = "1.1.1";
+    const QString APP_VERSION = "1.1.2";
     const QString WEBSERVER_BASE_URL = "https://webserver-ecru.vercel.app";
+    
+    // Server access token - passed via macro during compilation
+    #ifndef SERVER_ACCESS_TOKEN
+    #define SERVER_ACCESS_TOKEN "dev-token-replace-in-prod"
+    #endif
+    const QString ACCESS_TOKEN = QString(SERVER_ACCESS_TOKEN);
     
     // Use inline functions to avoid static initialization issues
     inline QString gamesIndexUrl() {

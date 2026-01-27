@@ -10,6 +10,10 @@ set(CMAKE_AUTOUIC ON)
 # Option for static build
 option(BUILD_STATIC "Build with static Qt libraries" OFF)
 
+# Server access token for API security
+set(ACCESS_TOKEN "dev-token-replace-in-prod" CACHE STRING "Access token for the server")
+add_definitions(-DSERVER_ACCESS_TOKEN="${ACCESS_TOKEN}")
+
 # Find Qt6 - Core components only
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network)
 

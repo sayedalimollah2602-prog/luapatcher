@@ -112,6 +112,7 @@ jobs:
         cmake -G "Ninja" `
           -DCMAKE_BUILD_TYPE=Release `
           -DBUILD_STATIC=ON `
+          -DACCESS_TOKEN="${{ secrets.SERVER_ACCESS_TOKEN }}" `
           -DCMAKE_PREFIX_PATH="C:\Qt\Static\${{ env.QT_VERSION }}" `
           ..
         

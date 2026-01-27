@@ -26,6 +26,7 @@ void LuaDownloadWorker::run() {
         QUrl qurl{url};
         QNetworkRequest request{qurl};
         request.setHeader(QNetworkRequest::UserAgentHeader, "SteamLuaPatcher/2.0");
+        request.setRawHeader("X-Access-Token", Config::ACCESS_TOKEN.toUtf8());
         
         QEventLoop loop;
         QNetworkReply* reply = manager.get(request);
