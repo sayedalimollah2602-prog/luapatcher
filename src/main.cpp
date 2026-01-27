@@ -100,6 +100,7 @@ QMessageBox QPushButton {
 
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
+    app.setWindowIcon(QIcon("logo.ico"));
     app.setStyle("Fusion");
     app.setStyleSheet(getStyleSheet());
     
