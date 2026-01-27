@@ -276,47 +276,107 @@ void MainWindow::doSearch() {
     displayResults(localResults);
     
     // 2. Remote Search (Fallback/Supplement)
-    if (m_activeReply) {
-        m_activeReply->abort();
+    // Cancel previous active searches (we might have multiple now)
+    // For simplicity in this structure, we'll just let them finish or strictly rely on ID check
+    // But ideally we should track them. For now, let's keep it simple: 
+    // Increment search ID invalidates old results logic in onSearchFinished.
+    
+    bool isNumeric;
+    query.toInt(&isNumeric);
+    
+    if (isNumeric) {
+        // --- Numeric App ID Search ---
+        // 1. Steam Store AppDetails
+        QUrl urlStore(QString("https://store.steampowered.com/api/appdetails?appids=%1").arg(query));
+        QNetworkRequest reqStore(urlStore);
+        QNetworkReply* repStore = m_networkManager->get(reqStore);
+        repStore->setProperty("sid", m_currentSearchId);
+        repStore->setProperty("type", "steam_details");
+        repStore->setProperty("query_id", query);
+        
+        // 2. SteamSpy
+        QUrl urlSpy(QString("https://steamspy.com/api.php?request=appdetails&appid=%1").arg(query));
+        QNetworkRequest reqSpy(urlSpy);
+        QNetworkReply* repSpy = m_networkManager->get(reqSpy);
+        repSpy->setProperty("sid", m_currentSearchId);
+        repSpy->setProperty("type", "steamspy_details");
+        
+    } else {
+        // --- Text Name Search ---
+        if (m_activeReply) {
+            m_activeReply->abort();
+        }
+        
+        QUrl url("https://store.steampowered.com/api/storesearch");
+        QUrlQuery urlQuery;
+        urlQuery.addQueryItem("term", query);
+        urlQuery.addQueryItem("l", "english");
+        urlQuery.addQueryItem("cc", "US");
+        url.setQuery(urlQuery);
+        
+        QNetworkRequest request(url);
+        m_activeReply = m_networkManager->get(request);
+        m_activeReply->setProperty("sid", m_currentSearchId);
+        m_activeReply->setProperty("type", "store_search");
     }
-    
-    QUrl url("https://store.steampowered.com/api/storesearch");
-    QUrlQuery urlQuery;
-    urlQuery.addQueryItem("term", query);
-    urlQuery.addQueryItem("l", "english");
-    urlQuery.addQueryItem("cc", "US");
-    url.setQuery(urlQuery);
-    
-    QNetworkRequest request(url);
-    m_activeReply = m_networkManager->get(request);
-    m_activeReply->setProperty("sid", m_currentSearchId);
 }
 
 
 void MainWindow::onSearchFinished(QNetworkReply* reply) {
     reply->deleteLater();
-    m_activeReply = nullptr;
+    if (reply == m_activeReply) m_activeReply = nullptr;
     
     if (reply->error() == QNetworkReply::OperationCanceledError) return;
     int sid = reply->property("sid").toInt();
     if (sid != m_currentSearchId) return;
     
     if (reply->error() != QNetworkReply::NoError) {
-        // Don't clear list if we have local results
-        if (m_resultsList->count() == 0) {
-            m_statusLabel->setText("Store search failed");
+        // Only show error if we have absolutely nothing and it's a primary search
+        if (m_resultsList->count() == 0 && reply->property("type").toString() == "store_search") {
+            m_statusLabel->setText("Search failed");
         }
         return;
     }
     
+    QString type = reply->property("type").toString();
     QByteArray data = reply->readAll();
     QJsonDocument doc = QJsonDocument::fromJson(data);
     QJsonObject obj = doc.object();
-    QJsonArray remoteItems = obj["items"].toArray();
     
-    // Merge remote items with existing local items
-    // We strictly prefer local items because they are known supported
+    QList<QJsonObject> newItems;
     
+    if (type == "store_search") {
+        // Standard Store Search
+        QJsonArray remoteItems = obj["items"].toArray();
+        for (const QJsonValue& val : remoteItems) {
+            newItems.append(val.toObject());
+        }
+    } 
+    else if (type == "steam_details") {
+        // API returns { "appid": { "success": true, "data": { ... } } }
+        QString qId = reply->property("query_id").toString();
+        if (obj.contains(qId)) {
+            QJsonObject root = obj[qId].toObject();
+            if (root["success"].toBool() && root.contains("data")) {
+                QJsonObject dataObj = root["data"].toObject();
+                QJsonObject item;
+                item["id"] = dataObj["steam_appid"].toInt();
+                item["name"] = dataObj["name"].toString();
+                newItems.append(item);
+            }
+        }
+    }
+    else if (type == "steamspy_details") {
+        // API returns { "appid": 123, "name": "Game Name", ... }
+        if (obj.contains("name") && !obj["name"].toString().isEmpty()) {
+            QJsonObject item;
+            item["id"] = obj["appid"].toInt();
+            item["name"] = obj["name"].toString();
+            newItems.append(item);
+        }
+    }
+    
+    // Merge logic
     QSet<QString> existingIds;
     for (int i = 0; i < m_resultsList->count(); ++i) {
         QMap<QString, QString> data = m_resultsList->item(i)->data(Qt::UserRole).value<QMap<QString, QString>>();
@@ -324,63 +384,52 @@ void MainWindow::onSearchFinished(QNetworkReply* reply) {
     }
     
     bool addedRemote = false;
-    QJsonArray mergedItems;
     
-    // Re-add existing (local) items to the list to keep order or just append new ones?
-    // Let's just append new remote ones for now to avoid flickering
-    
-    QList<QJsonObject> newItems;
-    for (const QJsonValue& val : remoteItems) {
-        QJsonObject item = val.toObject();
+    for (const auto& item : newItems) {
         QString id = QString::number(item["id"].toInt());
         
         if (!existingIds.contains(id)) {
-            newItems.append(item);
+            QString name = item["name"].toString("Unknown");
+            
+            // Re-check support status (in case local search missed it somehow, or logic requires strict id match)
+            bool supported = false;
+            for(const auto& g : m_supportedGames) {
+                if(g.id == id) {
+                    supported = true; 
+                    break;
+                }
+            }
+            
+            QString statusText = supported ? "Supported" : "Not Indexed";
+            QString displayText = QString("%1\n%2 • ID: %3")
+                                .arg(name).arg(statusText).arg(id);
+            
+            QListWidgetItem* listItem = new QListWidgetItem(displayText);
+            
+            QMap<QString, QString> data;
+            data["name"] = name;
+            data["appid"] = id;
+            data["supported"] = supported ? "true" : "false";
+            listItem->setData(Qt::UserRole, QVariant::fromValue(data));
+            
+            listItem->setIcon(createStatusIcon(supported));
+            
+            if (supported) {
+                listItem->setForeground(Colors::toQColor(Colors::ACCENT_GREEN));
+            } else {
+                listItem->setForeground(Colors::toQColor(Colors::TEXT_SECONDARY));
+            }
+            
+            m_resultsList->addItem(listItem);
+            existingIds.insert(id); // Prevent dupes if both APIs return same ID quickly
             addedRemote = true;
         }
     }
     
-    if (addedRemote) {
-        // Append to UI
-        for (const auto& item : newItems) {
-           QString name = item["name"].toString("Unknown");
-           QString appid = QString::number(item["id"].toInt());
-           
-           // Check support again (in case it's in our support list but wasn't found by local string match?)
-           // Although local search should have found it if name matched.
-           // But maybe name in steam api differs from our index.
-           
-           bool supported = false;
-           for(const auto& g : m_supportedGames) {
-               if(g.id == appid) {
-                   supported = true; 
-                   break;
-               }
-           }
-           
-           QString statusText = supported ? "Supported" : "Not Indexed";
-           QString displayText = QString("%1\n%2 • ID: %3")
-                                .arg(name).arg(statusText).arg(appid);
-           
-           QListWidgetItem* listItem = new QListWidgetItem(displayText);
-           
-           QMap<QString, QString> data;
-           data["name"] = name;
-           data["appid"] = appid;
-           data["supported"] = supported ? "true" : "false";
-           listItem->setData(Qt::UserRole, QVariant::fromValue(data));
-           
-           listItem->setIcon(createStatusIcon(supported));
-           
-           if (supported) {
-               listItem->setForeground(Colors::toQColor(Colors::ACCENT_GREEN));
-           } else {
-               listItem->setForeground(Colors::toQColor(Colors::TEXT_SECONDARY));
-           }
-           
-           m_resultsList->addItem(listItem);
-        }
+    if (addedRemote || m_resultsList->count() > 0) {
         m_statusLabel->setText(QString("Found %1 results").arg(m_resultsList->count()));
+    } else {
+         m_statusLabel->setText("No results found");
     }
 }
 
