@@ -31,6 +31,8 @@ MainWindow::MainWindow(QWidget* parent)
     , m_syncWorker(nullptr)
     , m_dlWorker(nullptr)
     , m_restartWorker(nullptr)
+    , m_fetchingNames(false)
+    , m_nameFetchSearchId(0)
 {
     setWindowTitle("Steam Lua Patcher");
     setFixedSize(900, 600);
@@ -256,6 +258,9 @@ void MainWindow::onSearchChanged(const QString& text) {
 void MainWindow::doSearch() {
     QString query = m_searchInput->text().trimmed();
     if (query.isEmpty()) return;
+    
+    // Cancel any in-progress name fetches
+    cancelNameFetches();
     
     m_currentSearchId++;
     m_statusLabel->setText("Searching...");
@@ -499,6 +504,8 @@ void MainWindow::displayResults(const QJsonArray& items) {
     m_resultsList->clear();
     m_selectedGame.clear();
     m_btnPatch->setEnabled(false);
+    m_pendingNameFetchIds.clear();
+    cancelNameFetches();
     
     if (items.isEmpty()) {
         // m_statusLabel->setText("No results found"); // Don't show this yet, might be waiting for remote
@@ -548,9 +555,19 @@ void MainWindow::displayResults(const QJsonArray& items) {
         }
         
         m_resultsList->addItem(listItem);
+        
+        // Track unknown games for batch fetch
+        if (name.startsWith("Unknown Game") || name == "Unknown") {
+            m_pendingNameFetchIds.append(appid);
+        }
     }
     
     m_statusLabel->setText(QString("Found %1 results").arg(items.size()));
+    
+    // Start fetching names for unknown games
+    if (!m_pendingNameFetchIds.isEmpty()) {
+        startBatchNameFetch();
+    }
 }
 
 void MainWindow::onGameSelected(QListWidgetItem* item) {
@@ -659,4 +676,144 @@ void MainWindow::doRestart() {
     connect(m_restartWorker, &RestartWorker::finished,
             m_statusLabel, &QLabel::setText);
     m_restartWorker->start();
+}
+
+void MainWindow::cancelNameFetches() {
+    m_fetchingNames = false;
+    for (QNetworkReply* reply : m_activeNameFetches) {
+        if (reply) {
+            reply->abort();
+            reply->deleteLater();
+        }
+    }
+    m_activeNameFetches.clear();
+    m_pendingNameFetchIds.clear();
+}
+
+void MainWindow::startBatchNameFetch() {
+    if (m_pendingNameFetchIds.isEmpty()) {
+        m_fetchingNames = false;
+        m_spinner->stop();
+        return;
+    }
+    
+    m_fetchingNames = true;
+    m_nameFetchSearchId = m_currentSearchId;
+    m_spinner->start();
+    m_statusLabel->setText(QString("Found %1 results • Fetching game names...")
+                          .arg(m_resultsList->count()));
+    
+    // Process up to 5 concurrent requests
+    int concurrentLimit = 5;
+    for (int i = 0; i < concurrentLimit && !m_pendingNameFetchIds.isEmpty(); ++i) {
+        processNextNameFetch();
+    }
+}
+
+void MainWindow::processNextNameFetch() {
+    if (m_pendingNameFetchIds.isEmpty() || !m_fetchingNames) {
+        // Check if all fetches are complete
+        if (m_activeNameFetches.isEmpty() && m_fetchingNames) {
+            m_fetchingNames = false;
+            m_spinner->stop();
+            m_statusLabel->setText(QString("Found %1 results").arg(m_resultsList->count()));
+        }
+        return;
+    }
+    
+    QString appId = m_pendingNameFetchIds.takeFirst();
+    
+    // First try Steam Store API
+    QUrl url(QString("https://store.steampowered.com/api/appdetails?appids=%1").arg(appId));
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::UserAgentHeader, "SteamLuaPatcher/2.0");
+    
+    QNetworkReply* reply = m_networkManager->get(request);
+    reply->setProperty("fetch_appid", appId);
+    reply->setProperty("fetch_type", "steam_store");
+    reply->setProperty("fetch_sid", m_nameFetchSearchId);
+    
+    m_activeNameFetches.append(reply);
+    
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        onGameNameFetched(reply);
+    });
+}
+
+void MainWindow::onGameNameFetched(QNetworkReply* reply) {
+    reply->deleteLater();
+    m_activeNameFetches.removeOne(reply);
+    
+    // Ignore if search changed
+    int fetchSid = reply->property("fetch_sid").toInt();
+    if (fetchSid != m_nameFetchSearchId || !m_fetchingNames) {
+        processNextNameFetch();
+        return;
+    }
+    
+    QString appId = reply->property("fetch_appid").toString();
+    QString fetchType = reply->property("fetch_type").toString();
+    QString gameName;
+    
+    if (reply->error() == QNetworkReply::NoError) {
+        QByteArray data = reply->readAll();
+        QJsonDocument doc = QJsonDocument::fromJson(data);
+        QJsonObject obj = doc.object();
+        
+        if (fetchType == "steam_store") {
+            // Steam Store response: { "appid": { "success": true, "data": { "name": "..." } } }
+            if (obj.contains(appId)) {
+                QJsonObject root = obj[appId].toObject();
+                if (root["success"].toBool() && root.contains("data")) {
+                    QJsonObject dataObj = root["data"].toObject();
+                    gameName = dataObj["name"].toString();
+                }
+            }
+        } else if (fetchType == "steamspy") {
+            // SteamSpy response: { "appid": 123, "name": "..." }
+            if (obj.contains("name") && !obj["name"].toString().isEmpty()) {
+                gameName = obj["name"].toString();
+            }
+        }
+    }
+    
+    // If Steam Store failed, try SteamSpy
+    if (gameName.isEmpty() && fetchType == "steam_store") {
+        QUrl spyUrl(QString("https://steamspy.com/api.php?request=appdetails&appid=%1").arg(appId));
+        QNetworkRequest spyRequest(spyUrl);
+        spyRequest.setHeader(QNetworkRequest::UserAgentHeader, "SteamLuaPatcher/2.0");
+        
+        QNetworkReply* spyReply = m_networkManager->get(spyRequest);
+        spyReply->setProperty("fetch_appid", appId);
+        spyReply->setProperty("fetch_type", "steamspy");
+        spyReply->setProperty("fetch_sid", m_nameFetchSearchId);
+        
+        m_activeNameFetches.append(spyReply);
+        
+        connect(spyReply, &QNetworkReply::finished, this, [this, spyReply]() {
+            onGameNameFetched(spyReply);
+        });
+        return;
+    }
+    
+    // Update list item if we got a name
+    if (!gameName.isEmpty()) {
+        for (int i = 0; i < m_resultsList->count(); ++i) {
+            QListWidgetItem* item = m_resultsList->item(i);
+            QMap<QString, QString> data = item->data(Qt::UserRole).value<QMap<QString, QString>>();
+            
+            if (data["appid"] == appId) {
+                bool supported = (data["supported"] == "true");
+                QString statusText = supported ? "Supported" : "Not Indexed";
+                item->setText(QString("%1\n%2 • ID: %3").arg(gameName).arg(statusText).arg(appId));
+                
+                data["name"] = gameName;
+                item->setData(Qt::UserRole, QVariant::fromValue(data));
+                break;
+            }
+        }
+    }
+    
+    // Process next in queue
+    processNextNameFetch();
 }
