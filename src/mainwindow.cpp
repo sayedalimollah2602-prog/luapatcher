@@ -275,11 +275,11 @@ void MainWindow::doSearch() {
     // Display local results immediately
     displayResults(localResults);
     
-    // 2. Remote Search (Fallback/Supplement)
-    // Cancel previous active searches (we might have multiple now)
-    // For simplicity in this structure, we'll just let them finish or strictly rely on ID check
-    // But ideally we should track them. For now, let's keep it simple: 
-    // Increment search ID invalidates old results logic in onSearchFinished.
+    // Show spinner if we need remote data
+    m_spinner->start();
+    if (m_resultsList->count() == 0) {
+        m_stack->setCurrentIndex(0); // Show spinner page if no local results
+    }
     
     bool isNumeric;
     query.toInt(&isNumeric);
@@ -360,13 +360,13 @@ void MainWindow::onSearchFinished(QNetworkReply* reply) {
             }
         }
         
-        // Fallback to SteamSpy if Steam API failed or returned no data
         if (!steamSuccess) {
             QUrl urlSpy(QString("https://steamspy.com/api.php?request=appdetails&appid=%1").arg(qId));
             QNetworkRequest reqSpy(urlSpy);
             QNetworkReply* repSpy = m_networkManager->get(reqSpy);
             repSpy->setProperty("sid", sid);
             repSpy->setProperty("type", "steamspy_details");
+            return; // Don't finalize yet, let SteamSpy finish
         }
     }
     else if (type == "steamspy_details") {
@@ -378,6 +378,10 @@ void MainWindow::onSearchFinished(QNetworkReply* reply) {
             newItems.append(item);
         }
     }
+    
+    // Search is finished (either standard or the final fallback)
+    m_spinner->stop();
+    m_stack->setCurrentIndex(1);
     
     // Merge logic
     QMap<QString, QListWidgetItem*> itemMap;

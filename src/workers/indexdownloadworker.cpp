@@ -85,63 +85,6 @@ void IndexDownloadWorker::run() {
             games.append({obj["id"].toString(), obj["name"].toString()});
         }
         
-        // Client-side Fallback: Check for missing/unknown names and fetch from Store API
-        int missingCount = 0;
-        for (const auto& game : games) {
-            if (game.name.isEmpty() || game.name.startsWith("Unknown Game") || game.name == game.id) {
-                missingCount++;
-            }
-        }
-
-        if (missingCount > 0) {
-             int fetchLimit = 50;
-             int fetched = 0;
-             emit progress(QString("Fetching details for %1 games...").arg(qMin(missingCount, fetchLimit)));
-             QNetworkAccessManager storeMgr;
-             
-             for (auto& game : games) {
-                 if (fetched >= fetchLimit) break;
-                 if (game.name.isEmpty() || game.name.startsWith("Unknown Game") || game.name == game.id) {
-                     fetched++;
-                     // ... rest of the fetch logic ...
-                     QUrl storeUrl("https://store.steampowered.com/api/appdetails");
-                     QUrlQuery query;
-                     query.addQueryItem("appids", game.id);
-                     query.addQueryItem("filters", "basic");
-                     storeUrl.setQuery(query);
-                     
-                     QNetworkRequest req(storeUrl);
-                     req.setHeader(QNetworkRequest::UserAgentHeader, "SteamLuaPatcher/2.0");
-                     
-                     QEventLoop storeLoop;
-                     QNetworkReply* storeReply = storeMgr.get(req);
-                     QTimer storeTimer;
-                     storeTimer.setSingleShot(true);
-                     connect(&storeTimer, &QTimer::timeout, &storeLoop, &QEventLoop::quit); 
-                     connect(storeReply, &QNetworkReply::finished, &storeLoop, &QEventLoop::quit);
-                     storeTimer.start(5000); 
-                     
-                     storeLoop.exec();
-                     
-                     if (storeReply->error() == QNetworkReply::NoError) {
-                         QJsonDocument storeDoc = QJsonDocument::fromJson(storeReply->readAll());
-                         QJsonObject storeRoot = storeDoc.object();
-                         if (storeRoot.contains(game.id)) {
-                             QJsonObject appData = storeRoot[game.id].toObject();
-                             if (appData["success"].toBool()) {
-                                 QString newName = appData["data"].toObject()["name"].toString();
-                                 if (!newName.isEmpty()) {
-                                     game.name = newName;
-                                 }
-                             }
-                         }
-                     }
-                     storeReply->deleteLater();
-                     QThread::msleep(200);
-                 }
-             }
-        }
-        
         emit finished(games);
 
         
