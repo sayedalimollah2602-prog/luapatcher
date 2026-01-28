@@ -286,21 +286,13 @@ void MainWindow::doSearch() {
     
     if (isNumeric) {
         // --- Numeric App ID Search ---
-        // 1. Steam Store AppDetails
+        // 1. Steam Store AppDetails (Primary)
         QUrl urlStore(QString("https://store.steampowered.com/api/appdetails?appids=%1").arg(query));
         QNetworkRequest reqStore(urlStore);
         QNetworkReply* repStore = m_networkManager->get(reqStore);
         repStore->setProperty("sid", m_currentSearchId);
         repStore->setProperty("type", "steam_details");
         repStore->setProperty("query_id", query);
-        
-        // 2. SteamSpy
-        QUrl urlSpy(QString("https://steamspy.com/api.php?request=appdetails&appid=%1").arg(query));
-        QNetworkRequest reqSpy(urlSpy);
-        QNetworkReply* repSpy = m_networkManager->get(reqSpy);
-        repSpy->setProperty("sid", m_currentSearchId);
-        repSpy->setProperty("type", "steamspy_details");
-        
     } else {
         // --- Text Name Search ---
         if (m_activeReply) {
@@ -355,6 +347,7 @@ void MainWindow::onSearchFinished(QNetworkReply* reply) {
     else if (type == "steam_details") {
         // API returns { "appid": { "success": true, "data": { ... } } }
         QString qId = reply->property("query_id").toString();
+        bool steamSuccess = false;
         if (obj.contains(qId)) {
             QJsonObject root = obj[qId].toObject();
             if (root["success"].toBool() && root.contains("data")) {
@@ -363,14 +356,24 @@ void MainWindow::onSearchFinished(QNetworkReply* reply) {
                 item["id"] = dataObj["steam_appid"].toInt();
                 item["name"] = dataObj["name"].toString();
                 newItems.append(item);
+                steamSuccess = true;
             }
+        }
+        
+        // Fallback to SteamSpy if Steam API failed or returned no data
+        if (!steamSuccess) {
+            QUrl urlSpy(QString("https://steamspy.com/api.php?request=appdetails&appid=%1").arg(qId));
+            QNetworkRequest reqSpy(urlSpy);
+            QNetworkReply* repSpy = m_networkManager->get(reqSpy);
+            repSpy->setProperty("sid", sid);
+            repSpy->setProperty("type", "steamspy_details");
         }
     }
     else if (type == "steamspy_details") {
         // API returns { "appid": 123, "name": "Game Name", ... }
         if (obj.contains("name") && !obj["name"].toString().isEmpty()) {
             QJsonObject item;
-            item["id"] = obj["appid"].toInt();
+            item["id"] = obj["appid"].isDouble() ? obj["appid"].toInt() : obj["appid"].toString().toInt();
             item["name"] = obj["name"].toString();
             newItems.append(item);
         }
