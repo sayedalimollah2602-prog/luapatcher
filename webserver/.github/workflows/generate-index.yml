@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -31,6 +33,12 @@ jobs:
       - name: Generate games index
         run: python generate_index.py
       
+      - name: Pull remote changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
+
       - name: Commit and push updated index
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
