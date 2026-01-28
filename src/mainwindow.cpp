@@ -45,6 +45,9 @@ MainWindow::MainWindow(QWidget* parent)
         setWindowIcon(QIcon(iconPath));
     }
     
+    // Initialize UI components first
+    initUI();
+    
     // Setup debounce timer
     m_debounceTimer = new QTimer(this);
     m_debounceTimer->setSingleShot(true);
@@ -787,9 +790,44 @@ void MainWindow::doGenerate() {
     
     m_genWorker = new GeneratorWorker(m_selectedGame["appid"], this);
     
-    // Connect Signals
+    // Connect Signals - GeneratorWorker now handles the file copy internally
     connect(m_genWorker, &GeneratorWorker::finished,
-            this, &MainWindow::onPatchDone);
+            this, [this](QString path) {
+                m_progress->hide();
+                m_btnGenerate->setEnabled(true);
+                m_statusLabel->setText("Patch Generated & Installed!");
+                m_terminalDialog->setFinished(true);
+                
+                // Update the list item to show green checkmark
+                QString appId = m_selectedGame["appid"];
+                for (int i = 0; i < m_resultsList->count(); ++i) {
+                    QListWidgetItem* item = m_resultsList->item(i);
+                    QMap<QString, QString> data = item->data(Qt::UserRole).value<QMap<QString, QString>>();
+                    
+                    if (data["appid"] == appId) {
+                        // Update status to patched/supported
+                        data["supported"] = "true";
+                        item->setData(Qt::UserRole, QVariant::fromValue(data));
+                        
+                        // Update display text
+                        QString name = data["name"];
+                        item->setText(QString("%1\nPatched • ID: %2").arg(name).arg(appId));
+                        
+                        // Update icon to green checkmark
+                        item->setIcon(createStatusIcon(true));
+                        item->setForeground(Colors::toQColor(Colors::ACCENT_GREEN));
+                        
+                        break;
+                    }
+                }
+                
+                // Hide the generate button since it's now patched
+                m_btnGenerate->hide();
+                
+                // Enable the patch button for future use
+                m_btnPatch->setEnabled(true);
+                m_btnPatch->setDescription(QString("Re-patch %1").arg(m_selectedGame["name"]));
+            });
             
     connect(m_genWorker, &GeneratorWorker::progress,
             [this](qint64 downloaded, qint64 total) {
