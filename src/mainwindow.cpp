@@ -380,32 +380,53 @@ void MainWindow::onSearchFinished(QNetworkReply* reply) {
     }
     
     // Merge logic
-    QSet<QString> existingIds;
+    QMap<QString, QListWidgetItem*> itemMap;
     for (int i = 0; i < m_resultsList->count(); ++i) {
-        QMap<QString, QString> data = m_resultsList->item(i)->data(Qt::UserRole).value<QMap<QString, QString>>();
-        existingIds.insert(data["appid"]);
+        QListWidgetItem* existingItem = m_resultsList->item(i);
+        QMap<QString, QString> itemData = existingItem->data(Qt::UserRole).value<QMap<QString, QString>>();
+        itemMap.insert(itemData["appid"], existingItem);
     }
     
-    bool addedRemote = false;
+    bool resultsChanged = false;
     
     for (const auto& item : newItems) {
         QString id = QString::number(item["id"].toInt());
+        QString name = item["name"].toString("Unknown");
         
-        if (!existingIds.contains(id)) {
-            QString name = item["name"].toString("Unknown");
-            
-            // Re-check support status (in case local search missed it somehow, or logic requires strict id match)
-            bool supported = false;
-            for(const auto& g : m_supportedGames) {
-                if(g.id == id) {
-                    supported = true; 
-                    break;
-                }
+        // Re-check support status
+        bool supported = false;
+        for(const auto& g : m_supportedGames) {
+            if(g.id == id) {
+                supported = true; 
+                break;
             }
+        }
+
+        if (itemMap.contains(id)) {
+            // Update existing if it's "Unknown"
+            QListWidgetItem* existingItem = itemMap[id];
+            QMap<QString, QString> existingData = existingItem->data(Qt::UserRole).value<QMap<QString, QString>>();
             
+            if (existingData["name"].contains("Unknown Game", Qt::CaseInsensitive) || existingData["name"] == id) {
+                QString statusText = supported ? "Supported" : "Not Indexed";
+                existingItem->setText(QString("%1\n%2 • ID: %3").arg(name).arg(statusText).arg(id));
+                
+                existingData["name"] = name;
+                existingData["supported"] = supported ? "true" : "false";
+                existingItem->setData(Qt::UserRole, QVariant::fromValue(existingData));
+                
+                existingItem->setIcon(createStatusIcon(supported));
+                if (supported) {
+                    existingItem->setForeground(Colors::toQColor(Colors::ACCENT_GREEN));
+                } else {
+                    existingItem->setForeground(Colors::toQColor(Colors::TEXT_SECONDARY));
+                }
+                resultsChanged = true;
+            }
+        } else {
+            // Add new item
             QString statusText = supported ? "Supported" : "Not Indexed";
-            QString displayText = QString("%1\n%2 • ID: %3")
-                                .arg(name).arg(statusText).arg(id);
+            QString displayText = QString("%1\n%2 • ID: %3").arg(name).arg(statusText).arg(id);
             
             QListWidgetItem* listItem = new QListWidgetItem(displayText);
             
@@ -416,7 +437,6 @@ void MainWindow::onSearchFinished(QNetworkReply* reply) {
             listItem->setData(Qt::UserRole, QVariant::fromValue(data));
             
             listItem->setIcon(createStatusIcon(supported));
-            
             if (supported) {
                 listItem->setForeground(Colors::toQColor(Colors::ACCENT_GREEN));
             } else {
@@ -424,12 +444,12 @@ void MainWindow::onSearchFinished(QNetworkReply* reply) {
             }
             
             m_resultsList->addItem(listItem);
-            existingIds.insert(id); // Prevent dupes if both APIs return same ID quickly
-            addedRemote = true;
+            itemMap.insert(id, listItem);
+            resultsChanged = true;
         }
     }
     
-    if (addedRemote || m_resultsList->count() > 0) {
+    if (resultsChanged || m_resultsList->count() > 0) {
         m_statusLabel->setText(QString("Found %1 results").arg(m_resultsList->count()));
     } else {
          m_statusLabel->setText("No results found");

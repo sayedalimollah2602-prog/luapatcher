@@ -93,12 +93,17 @@ void IndexDownloadWorker::run() {
             }
         }
 
-        if (missingCount > 0 && missingCount < 50) { // Limit to avoid massive delays if everything is broken
-             emit progress(QString("Fetching details for %1 games...").arg(missingCount));
+        if (missingCount > 0) {
+             int fetchLimit = 50;
+             int fetched = 0;
+             emit progress(QString("Fetching details for %1 games...").arg(qMin(missingCount, fetchLimit)));
              QNetworkAccessManager storeMgr;
              
              for (auto& game : games) {
+                 if (fetched >= fetchLimit) break;
                  if (game.name.isEmpty() || game.name.startsWith("Unknown Game") || game.name == game.id) {
+                     fetched++;
+                     // ... rest of the fetch logic ...
                      QUrl storeUrl("https://store.steampowered.com/api/appdetails");
                      QUrlQuery query;
                      query.addQueryItem("appids", game.id);
@@ -110,7 +115,6 @@ void IndexDownloadWorker::run() {
                      
                      QEventLoop storeLoop;
                      QNetworkReply* storeReply = storeMgr.get(req);
-                     // Simple timeout to prevent hanging forever
                      QTimer storeTimer;
                      storeTimer.setSingleShot(true);
                      connect(&storeTimer, &QTimer::timeout, &storeLoop, &QEventLoop::quit); 
@@ -133,8 +137,6 @@ void IndexDownloadWorker::run() {
                          }
                      }
                      storeReply->deleteLater();
-                     
-                     // Polite delay
                      QThread::msleep(200);
                  }
              }
