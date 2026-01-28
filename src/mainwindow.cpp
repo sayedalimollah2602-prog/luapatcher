@@ -25,7 +25,7 @@
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
-    , m_networkManager(new QNetworkAccessManager(this))
+    , m_networkManager(nullptr)
     , m_activeReply(nullptr)
     , m_currentSearchId(0)
     , m_syncWorker(nullptr)
@@ -48,12 +48,13 @@ MainWindow::MainWindow(QWidget* parent)
     m_debounceTimer->setSingleShot(true);
     connect(m_debounceTimer, &QTimer::timeout, this, &MainWindow::doSearch);
     
-    // Setup network manager
-    connect(m_networkManager, &QNetworkAccessManager::finished,
-            this, &MainWindow::onSearchFinished);
-    
-    initUI();
-    startSync();
+    // Defer network initialization and sync to allow window to show first
+    QTimer::singleShot(10, this, [this]() {
+        m_networkManager = new QNetworkAccessManager(this);
+        connect(m_networkManager, &QNetworkAccessManager::finished,
+                this, &MainWindow::onSearchFinished);
+        startSync();
+    });
 }
 
 MainWindow::~MainWindow() {
@@ -302,6 +303,9 @@ void MainWindow::onSearchChanged(const QString& text) {
 void MainWindow::doSearch() {
     QString query = m_searchInput->text().trimmed();
     if (query.isEmpty()) return;
+    
+    // Safety check if triggered before init
+    if (!m_networkManager) return;
     
     // Cancel any in-progress name fetches
     cancelNameFetches();

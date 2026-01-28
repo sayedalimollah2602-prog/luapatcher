@@ -105,7 +105,11 @@ int main(int argc, char *argv[]) {
     app.setStyleSheet(getStyleSheet());
     
     // Set global font
-    QFont font("Segoe UI", 10);
+    QFont font = app.font();
+#ifdef Q_OS_WIN
+    font.setFamily("Segoe UI");
+#endif
+    font.setPointSize(10);
     app.setFont(font);
     
     MainWindow window;
