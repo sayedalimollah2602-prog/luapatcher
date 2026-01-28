@@ -248,6 +248,9 @@ void MainWindow::initUI() {
     rightCol->addWidget(m_progress);
     
     mainLayout->addLayout(rightCol, 65);
+    
+    // Terminal Dialog
+    m_terminalDialog = new TerminalDialog(this);
 }
 
 void MainWindow::startSync() {
@@ -634,50 +637,82 @@ void MainWindow::doPatch() {
     
     m_btnPatch->setEnabled(false);
     m_progress->setValue(0);
-    m_progress->show();
+    // m_progress->show(); // Hide progress bar as we use terminal now
+    
+    // Setup Terminal Dialog
+    m_terminalDialog->clear();
+    m_terminalDialog->appendLog(QString("Initializing patch for: %1").arg(m_selectedGame["name"]), "INFO");
+    m_terminalDialog->show();
     
     m_dlWorker = new LuaDownloadWorker(m_selectedGame["appid"], this);
+    
+    // Connect Signals
     connect(m_dlWorker, &LuaDownloadWorker::finished,
             this, &MainWindow::onPatchDone);
+            
     connect(m_dlWorker, &LuaDownloadWorker::progress,
             [this](qint64 downloaded, qint64 total) {
                 if (total > 0) {
                     m_progress->setValue(static_cast<int>(downloaded * 100 / total));
                 }
             });
+            
     connect(m_dlWorker, &LuaDownloadWorker::status,
-            m_statusLabel, &QLabel::setText);
+            [this](QString msg) {
+                m_statusLabel->setText(msg);
+            });
+            
+    // Connect detailed logging
+    connect(m_dlWorker, &LuaDownloadWorker::log, 
+            m_terminalDialog, &TerminalDialog::appendLog);
+            
     connect(m_dlWorker, &LuaDownloadWorker::error,
             this, &MainWindow::onPatchError);
+            
     m_dlWorker->start();
 }
 
 void MainWindow::onPatchDone(QString path) {
     try {
+        m_terminalDialog->appendLog("Patch file downloaded. Installing...", "INFO");
+        
         QStringList targetDirs = Config::getAllSteamPluginDirs();
         if (targetDirs.isEmpty()) {
             targetDirs.append(Config::getSteamPluginDir());
+            m_terminalDialog->appendLog("No cached plugin paths found, using default.", "WARN");
         }
 
         bool atLeastOneSuccess = false;
         QString lastError;
 
         for (const QString& pluginDir : targetDirs) {
-            QString dest = QDir(pluginDir).filePath(m_selectedGame["appid"] + ".lua");
+            m_terminalDialog->appendLog(QString("checking for stplug folder: %1").arg(pluginDir), "INFO");
             
-            QDir dir;
-            if (!dir.exists(pluginDir)) {
-                dir.mkpath(pluginDir);
+            QDir dir(pluginDir);
+            if (dir.exists()) {
+                m_terminalDialog->appendLog(QString("found stplug in %1").arg(pluginDir), "INFO");
+            } else {
+                m_terminalDialog->appendLog(QString("creating stplug folder in %1").arg(pluginDir), "INFO");
+                if (!dir.mkpath(pluginDir)) {
+                    m_terminalDialog->appendLog(QString("Failed to create directory: %1").arg(pluginDir), "ERROR");
+                    continue;
+                }
             }
             
+            QString dest = dir.filePath(m_selectedGame["appid"] + ".lua");
+            
             if (QFile::exists(dest)) {
+                m_terminalDialog->appendLog("Removing existing patch file...", "INFO");
                 QFile::remove(dest);
             }
             
+            m_terminalDialog->appendLog(QString("Copying patch to %1").arg(dest), "INFO");
             if (QFile::copy(path, dest)) {
+                m_terminalDialog->appendLog("Copy successful", "SUCCESS");
                 atLeastOneSuccess = true;
             } else {
                 lastError = "Failed to copy patch file to " + pluginDir;
+                m_terminalDialog->appendLog(lastError, "ERROR");
             }
         }
 
@@ -691,9 +726,10 @@ void MainWindow::onPatchDone(QString path) {
         m_progress->hide();
         m_btnPatch->setEnabled(true);
         m_statusLabel->setText("Patch Installed!");
-        QMessageBox::information(this, "Success",
-                                QString("Patch installed for %1")
-                                .arg(m_selectedGame["name"]));
+        
+        m_terminalDialog->appendLog("All operations completed successfully.", "SUCCESS");
+        m_terminalDialog->setFinished(true);
+        
     } catch (const std::exception& e) {
         onPatchError(QString::fromStdString(e.what()));
     }
@@ -703,7 +739,9 @@ void MainWindow::onPatchError(QString error) {
     m_progress->hide();
     m_btnPatch->setEnabled(true);
     m_statusLabel->setText("Error");
-    QMessageBox::critical(this, "Error", error);
+    
+    m_terminalDialog->appendLog(QString("Process failed: %1").arg(error), "ERROR");
+    m_terminalDialog->setFinished(false);
 }
 
 void MainWindow::doRestart() {

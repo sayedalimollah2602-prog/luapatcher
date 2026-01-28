@@ -17,6 +17,7 @@
 
 class GlassButton;
 #include "utils/gameinfo.h"
+#include "terminaldialog.h"
 
 class LoadingSpinner;
 class IndexDownloadWorker;
@@ -66,6 +67,7 @@ private:
     QProgressBar* m_progress;
     GlassButton* m_btnPatch;
     GlassButton* m_btnRestart;
+    TerminalDialog* m_terminalDialog;
 
     // Data
     QList<GameInfo> m_supportedGames;

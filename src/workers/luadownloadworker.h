@@ -14,6 +14,7 @@ signals:
     void finished(QString cachePath);
     void progress(qint64 downloaded, qint64 total);
     void status(QString message);
+    void log(QString message, QString level);  // level: INFO, SUCCESS, ERROR, WARN
     void error(QString errorMessage);
 
 protected:

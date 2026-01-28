@@ -35,6 +35,7 @@ set(SOURCES
     src/workers/restartworker.cpp
     src/utils/paths.cpp
     src/utils/colors.cpp
+    src/terminaldialog.cpp
 )
 
 set(HEADERS
@@ -47,6 +48,7 @@ set(HEADERS
     src/utils/paths.h
     src/utils/colors.h
     src/config.h
+    src/terminaldialog.h
 )
 
 # Add static plugin initialization for static builds
