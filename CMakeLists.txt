@@ -18,11 +18,11 @@ add_definitions(-DSERVER_ACCESS_TOKEN="${ACCESS_TOKEN}")
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network)
 
 # Application icon resource (optional)
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/app.rc")
-    set(APP_ICON_RESOURCE_WINDOWS "${CMAKE_CURRENT_SOURCE_DIR}/app.rc")
-else()
+# if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/app.rc")
+#     set(APP_ICON_RESOURCE_WINDOWS "${CMAKE_CURRENT_SOURCE_DIR}/app.rc")
+# else()
     set(APP_ICON_RESOURCE_WINDOWS "")
-endif()
+# endif()
 
 # Source files
 set(SOURCES
@@ -32,6 +32,7 @@ set(SOURCES
     src/loadingspinner.cpp
     src/workers/indexdownloadworker.cpp
     src/workers/luadownloadworker.cpp
+    src/workers/generatorworker.cpp
     src/workers/restartworker.cpp
     src/utils/paths.cpp
     src/utils/colors.cpp
@@ -44,6 +45,7 @@ set(HEADERS
     src/loadingspinner.h
     src/workers/indexdownloadworker.h
     src/workers/luadownloadworker.h
+    src/workers/generatorworker.h
     src/workers/restartworker.h
     src/utils/paths.h
     src/utils/colors.h

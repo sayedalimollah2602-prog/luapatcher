@@ -3,6 +3,7 @@
 #include "loadingspinner.h"
 #include "workers/indexdownloadworker.h"
 #include "workers/luadownloadworker.h"
+#include "workers/generatorworker.h"
 #include "workers/restartworker.h"
 #include "utils/colors.h"
 #include "utils/paths.h"
@@ -30,6 +31,7 @@ MainWindow::MainWindow(QWidget* parent)
     , m_currentSearchId(0)
     , m_syncWorker(nullptr)
     , m_dlWorker(nullptr)
+    , m_genWorker(nullptr)
     , m_restartWorker(nullptr)
     , m_fetchingNames(false)
     , m_nameFetchSearchId(0)
@@ -118,6 +120,14 @@ void MainWindow::initUI() {
     m_btnPatch->setEnabled(false);
     connect(m_btnPatch, &QPushButton::clicked, this, &MainWindow::doPatch);
     leftCol->addWidget(m_btnPatch);
+    
+    m_btnGenerate = new GlassButton("⚡", "Generate Patch", 
+                                 "Fetch data for unknown game",
+                                 Colors::ACCENT_RED); // Orange/Red for generate
+    m_btnGenerate->setEnabled(false);
+    m_btnGenerate->hide();
+    connect(m_btnGenerate, &QPushButton::clicked, this, &MainWindow::doGenerate);
+    leftCol->addWidget(m_btnGenerate);
     
     m_btnRestart = new GlassButton("↻", "Restart Steam",
                                    "Apply changes by restarting Steam",
@@ -608,6 +618,9 @@ void MainWindow::displayResults(const QJsonArray& items) {
         if (name.startsWith("Unknown Game") || name == "Unknown") {
             m_pendingNameFetchIds.append(appid);
         }
+        
+        // Also check if we just generated a patch for this game to update status effectively? 
+        // For now, no extra logic needed.
     }
     
     m_statusLabel->setText(QString("Found %1 results").arg(items.size()));
@@ -628,11 +641,20 @@ void MainWindow::onGameSelected(QListWidgetItem* item) {
         m_btnPatch->setDescription(QString("Install patch for %1")
                                   .arg(data["name"]));
         m_statusLabel->setText(QString("Selected: %1").arg(data["name"]));
+        
+        m_btnGenerate->hide();
     } else {
-        m_selectedGame.clear();
+        m_selectedGame = data; // Keep selected game even if unsupported so we can generate
+        m_selectedGame["supported"] = "false"; // Explicitly mark
+        
         m_btnPatch->setEnabled(false);
         m_btnPatch->setDescription("Patch unavailable for this game");
-        m_statusLabel->setText("Game not supported");
+        
+        m_btnGenerate->setEnabled(true);
+        m_btnGenerate->show();
+        m_btnGenerate->setDescription(QString("Generate patch for %1").arg(data["name"]));
+        
+        m_statusLabel->setText("Game not supported (Generator available)");
     }
 }
 
@@ -729,6 +751,8 @@ void MainWindow::onPatchDone(QString path) {
         
         m_progress->hide();
         m_btnPatch->setEnabled(true);
+        if(m_btnGenerate->isVisible()) m_btnGenerate->setEnabled(true);
+        
         m_statusLabel->setText("Patch Installed!");
         
         m_terminalDialog->appendLog("All operations completed successfully.", "SUCCESS");
@@ -742,10 +766,50 @@ void MainWindow::onPatchDone(QString path) {
 void MainWindow::onPatchError(QString error) {
     m_progress->hide();
     m_btnPatch->setEnabled(true);
+    if(m_btnGenerate->isVisible()) m_btnGenerate->setEnabled(true);
+    
     m_statusLabel->setText("Error");
     
     m_terminalDialog->appendLog(QString("Process failed: %1").arg(error), "ERROR");
     m_terminalDialog->setFinished(false);
+}
+
+void MainWindow::doGenerate() {
+    if (m_selectedGame.isEmpty()) return;
+    
+    m_btnGenerate->setEnabled(false);
+    m_progress->setValue(0);
+    
+    // Setup Terminal Dialog
+    m_terminalDialog->clear();
+    m_terminalDialog->appendLog(QString("Initializing generation for: %1 (%2)").arg(m_selectedGame["name"]).arg(m_selectedGame["appid"]), "INFO");
+    m_terminalDialog->show();
+    
+    m_genWorker = new GeneratorWorker(m_selectedGame["appid"], this);
+    
+    // Connect Signals
+    connect(m_genWorker, &GeneratorWorker::finished,
+            this, &MainWindow::onPatchDone);
+            
+    connect(m_genWorker, &GeneratorWorker::progress,
+            [this](qint64 downloaded, qint64 total) {
+                if (total > 0) {
+                    m_progress->setValue(static_cast<int>(downloaded * 100 / total));
+                }
+            });
+            
+    connect(m_genWorker, &GeneratorWorker::status,
+            [this](QString msg) {
+                m_statusLabel->setText(msg);
+            });
+            
+    connect(m_genWorker, &GeneratorWorker::log, 
+            m_terminalDialog, &TerminalDialog::appendLog);
+            
+    connect(m_genWorker, &GeneratorWorker::error,
+            this, &MainWindow::onPatchError);
+            
+    m_genWorker->start();
 }
 
 void MainWindow::doRestart() {
