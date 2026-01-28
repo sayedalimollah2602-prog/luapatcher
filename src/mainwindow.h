@@ -7,6 +7,7 @@
 #include <QMap>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QPushButton>
 #include <QLabel>
 #include <QProgressBar>
 #include <QStackedWidget>

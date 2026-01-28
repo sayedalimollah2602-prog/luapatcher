@@ -150,20 +150,61 @@ void MainWindow::initUI() {
     QVBoxLayout* rightCol = new QVBoxLayout();
     rightCol->setSpacing(16);
     
-    // Search Bar
+    // Search Bar Layout
+    QHBoxLayout* searchLayout = new QHBoxLayout();
+    searchLayout->setSpacing(8);
+    
     m_searchInput = new QLineEdit();
     m_searchInput->setPlaceholderText("Find a game...");
     connect(m_searchInput, &QLineEdit::textChanged, 
             this, &MainWindow::onSearchChanged);
     
-    // Add shadow
+    // Add shadow to search input
     QGraphicsDropShadowEffect* shadow = new QGraphicsDropShadowEffect(m_searchInput);
     shadow->setBlurRadius(20);
     shadow->setColor(QColor(0, 0, 0, 80));
     shadow->setOffset(0, 4);
     m_searchInput->setGraphicsEffect(shadow);
     
-    rightCol->addWidget(m_searchInput);
+    searchLayout->addWidget(m_searchInput);
+    
+    // Refresh Button
+    QPushButton* refreshBtn = new QPushButton("↻");
+    refreshBtn->setFixedSize(36, 36);
+    refreshBtn->setCursor(Qt::PointingHandCursor);
+    refreshBtn->setToolTip("Refresh search results");
+    refreshBtn->setStyleSheet(QString(
+        "QPushButton {"
+        "    background: %1;"
+        "    border: 1px solid %2;"
+        "    border-radius: 8px;"
+        "    font-size: 16px;"
+        "    font-weight: bold;"
+        "    color: %3;"
+        "}"
+        "QPushButton:hover {"
+        "    background: %4;"
+        "    border-color: %5;"
+        "}"
+        "QPushButton:pressed {"
+        "    background: %6;"
+        "}")
+        .arg(Colors::GLASS_BG)
+        .arg(Colors::GLASS_BORDER)
+        .arg(Colors::TEXT_PRIMARY)
+        .arg(Colors::GLASS_HOVER)
+        .arg(Colors::ACCENT_BLUE)
+        .arg(Colors::GLASS_BG));
+    connect(refreshBtn, &QPushButton::clicked, this, [this]() {
+        if (m_searchInput->text().trimmed().isEmpty()) {
+            startSync();  // Re-download game index
+        } else {
+            doSearch();   // Re-run current search
+        }
+    });
+    searchLayout->addWidget(refreshBtn);
+    
+    rightCol->addLayout(searchLayout);
     
     // Stack for Loading / List
     m_stack = new QStackedWidget();
