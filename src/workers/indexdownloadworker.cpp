@@ -27,6 +27,9 @@ void IndexDownloadWorker::run() {
         QDir dir;
         dir.mkpath(cacheDir);
         
+        QString indexPath = Paths::getLocalIndexPath();
+        QJsonObject indexData;
+
         // Explicitly remove old cache as requested
         if (QFile::exists(indexPath)) {
             QFile::remove(indexPath);
