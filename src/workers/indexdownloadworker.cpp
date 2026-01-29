@@ -12,6 +12,7 @@
 #include <QFile>
 #include <QDir>
 #include <QUrlQuery>
+#include <QDateTime>
 
 IndexDownloadWorker::IndexDownloadWorker(QObject* parent)
     : QThread(parent)
@@ -26,16 +27,27 @@ void IndexDownloadWorker::run() {
         QDir dir;
         dir.mkpath(cacheDir);
         
-        QString indexPath = Paths::getLocalIndexPath();
-        QJsonObject indexData;
-        
+        // Explicitly remove old cache as requested
+        if (QFile::exists(indexPath)) {
+            QFile::remove(indexPath);
+        }
+
         // Try to download
         emit progress("Syncing library...");
         
         QNetworkAccessManager manager;
-        QUrl requestUrl{Config::gamesIndexUrl()};
+        // Add timestamp to query to prevent server-side caching
+        QString urlStr = Config::gamesIndexUrl();
+        if (urlStr.contains("?")) {
+            urlStr += "&_t=" + QString::number(QDateTime::currentMSecsSinceEpoch());
+        } else {
+            urlStr += "?_t=" + QString::number(QDateTime::currentMSecsSinceEpoch());
+        }
+
+        QUrl requestUrl{urlStr};
         QNetworkRequest request{requestUrl};
         request.setHeader(QNetworkRequest::UserAgentHeader, "SteamLuaPatcher/2.0");
+        request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
         
         QEventLoop loop;
         QNetworkReply* reply = manager.get(request);
