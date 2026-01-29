@@ -18,11 +18,20 @@ add_definitions(-DSERVER_ACCESS_TOKEN="${ACCESS_TOKEN}")
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network)
 
 # Application icon resource (optional)
-# if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/app.rc")
-#     set(APP_ICON_RESOURCE_WINDOWS "${CMAKE_CURRENT_SOURCE_DIR}/app.rc")
-# else()
+# Application icon resource (optional)
+# Application icon resource (optional)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/app.rc")
+    set(APP_ICON_RESOURCE_WINDOWS "${CMAKE_CURRENT_SOURCE_DIR}/app.rc")
+else()
     set(APP_ICON_RESOURCE_WINDOWS "")
-# endif()
+endif()
+
+
+
+
+# Copy logo.ico to the build directory so it can be found at runtime
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/logo.ico" "${CMAKE_BINARY_DIR}/logo.ico" COPYONLY)
+
 
 # Source files
 set(SOURCES
@@ -59,11 +68,20 @@ if(BUILD_STATIC)
 endif()
 
 # Create executable
+# Create executable
 if(WIN32 AND APP_ICON_RESOURCE_WINDOWS)
-    add_executable(SteamLuaPatcher WIN32 ${SOURCES} ${HEADERS} ${APP_ICON_RESOURCE_WINDOWS})
+    # Compile icon resource separately to avoid autogen include issues
+    add_library(AppIcon OBJECT "${APP_ICON_RESOURCE_WINDOWS}")
+    set_target_properties(AppIcon PROPERTIES 
+        AUTOMOC OFF 
+        AUTOUIC OFF 
+        AUTORCC OFF
+    )
+    add_executable(SteamLuaPatcher WIN32 ${SOURCES} ${HEADERS} $<TARGET_OBJECTS:AppIcon>)
 else()
     add_executable(SteamLuaPatcher ${SOURCES} ${HEADERS})
 endif()
+
 
 # Link Qt libraries
 target_link_libraries(SteamLuaPatcher PRIVATE
