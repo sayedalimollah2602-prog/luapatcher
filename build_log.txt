@@ -1,9 +1,0 @@
-[  6%] Automatic MOC and UIC for target SteamLuaPatcher
-[  6%] Built target SteamLuaPatcher_autogen
-[ 13%] Building RC object CMakeFiles/SteamLuaPatcher.dir/app.rc.obj
-cc1.exe: fatal error: luapatcher\build\SteamLuaPatcher_autogen\include: No such file or directory
-compilation terminated.
-C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin\windres.exe: preprocessing failed.
-mingw32-make[2]: *** [CMakeFiles\SteamLuaPatcher.dir\build.make:254: CMakeFiles/SteamLuaPatcher.dir/app.rc.obj] Error 1
-mingw32-make[1]: *** [CMakeFiles\Makefile2:83: CMakeFiles/SteamLuaPatcher.dir/all] Error 2
-mingw32-make: *** [Makefile:135: all] Error 2
