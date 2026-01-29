@@ -61,15 +61,59 @@ def admin_panel():
     if not auth or not check_auth(auth.username, auth.password):
         return authenticate()
     
+    import json
+
+    # Load games index
+    games_list_html = ""
+    try:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        index_path = os.path.join(base_dir, 'games_index.json')
+        if os.path.exists(index_path):
+            with open(index_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                games = data.get('games', [])
+                
+                rows = []
+                for game in games:
+                    game_id = game.get('id', 'N/A')
+                    game_name = game.get('name', 'N/A')
+                    rows.append(f"<tr><td class='id-col'>{game_id}</td><td class='name-col'>{game_name}</td></tr>")
+                games_list_html = "\n".join(rows)
+        else:
+            games_list_html = "<tr><td colspan='2'>games_index.json not found</td></tr>"
+    except Exception as e:
+        games_list_html = f"<tr><td colspan='2'>Error loading games: {str(e)}</td></tr>"
+
     return f"""
     <html>
         <head>
             <title>Admin Panel - Steam Lua Patcher</title>
             <style>
-                body {{ font-family: sans-serif; padding: 50px; background: #121212; color: #eee; }}
-                .container {{ max-width: 600px; margin: 0 auto; background: #1e1e1e; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }}
-                h1 {{ color: #bb86fc; }}
-                .token-box {{ background: #2c2c2c; padding: 15px; border-radius: 4px; border: 1px solid #333; font-family: monospace; font-size: 1.2em; word-break: break-all; margin-top: 20px; }}
+                body {{ font-family: 'Segoe UI', sans-serif; padding: 50px; background: #121212; color: #eee; }}
+                .container {{ max-width: 800px; margin: 0 auto; background: #1e1e1e; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }}
+                h1 {{ color: #bb86fc; margin-bottom: 20px; }}
+                h2 {{ color: #03dac6; margin-top: 30px; margin-bottom: 10px; }}
+                .token-box {{ background: #2c2c2c; padding: 15px; border-radius: 4px; border: 1px solid #333; font-family: monospace; font-size: 1.2em; word-break: break-all; margin-bottom: 20px; }}
+                
+                /* Search Bar */
+                #searchInput {{
+                    width: 100%;
+                    padding: 12px;
+                    margin-bottom: 20px;
+                    background: #2c2c2c;
+                    border: 1px solid #444;
+                    color: #fff;
+                    border-radius: 4px;
+                    font-size: 16px;
+                }}
+                #searchInput:focus {{ outline: none; border-color: #bb86fc; }}
+                
+                /* Table */
+                table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
+                th, td {{ padding: 12px; text-align: left; border-bottom: 1px solid #333; }}
+                th {{ background-color: #2c2c2c; color: #bb86fc; }}
+                tr:hover {{ background-color: #2a2a2a; }}
+                .id-col {{ width: 150px; font-family: monospace; color: #03dac6; }}
             </style>
         </head>
         <body>
@@ -77,7 +121,49 @@ def admin_panel():
                 <h1>Admin Panel</h1>
                 <p>Use the following token in your GitHub Secrets (SERVER_ACCESS_TOKEN) and during app compilation.</p>
                 <div class="token-box">{ACCESS_TOKEN}</div>
+                
+                <h2>Available Games</h2>
+                <input type="text" id="searchInput" onkeyup="searchGames()" placeholder="Search for games by name or ID...">
+                
+                <table id="gamesTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {games_list_html}
+                    </tbody>
+                </table>
             </div>
+            
+            <script>
+                function searchGames() {{
+                    var input, filter, table, tr, td, i, txtValue;
+                    input = document.getElementById("searchInput");
+                    filter = input.value.toUpperCase();
+                    table = document.getElementById("gamesTable");
+                    tr = table.getElementsByTagName("tr");
+                    
+                    for (i = 0; i < tr.length; i++) {{
+                        // Check both ID (index 0) and Name (index 1) columns
+                        tdId = tr[i].getElementsByTagName("td")[0];
+                        tdName = tr[i].getElementsByTagName("td")[1];
+                        
+                        if (tdId || tdName) {{
+                            txtValueId = tdId ? (tdId.textContent || tdId.innerText) : "";
+                            txtValueName = tdName ? (tdName.textContent || tdName.innerText) : "";
+                            
+                            if (txtValueId.toUpperCase().indexOf(filter) > -1 || txtValueName.toUpperCase().indexOf(filter) > -1) {{
+                                tr[i].style.display = "";
+                            }} else {{
+                                tr[i].style.display = "none";
+                            }}
+                        }}
+                    }}
+                }}
+            </script>
         </body>
     </html>
     """
