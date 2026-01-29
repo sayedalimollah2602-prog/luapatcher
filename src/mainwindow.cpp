@@ -124,9 +124,9 @@ void MainWindow::initUI() {
     connect(m_btnPatch, &QPushButton::clicked, this, &MainWindow::doPatch);
     leftCol->addWidget(m_btnPatch);
     
-    m_btnGenerate = new GlassButton("⚡", "Generate Patch", 
+    m_btnGenerate = new GlassButton("⚙", "Generate Patch", 
                                  "Fetch data for unknown game",
-                                 Colors::ACCENT_RED); // Orange/Red for generate
+                                 Colors::ACCENT_BLUE); // Blue for generate
     m_btnGenerate->setEnabled(false);
     m_btnGenerate->hide();
     connect(m_btnGenerate, &QPushButton::clicked, this, &MainWindow::doGenerate);
@@ -478,7 +478,7 @@ void MainWindow::onSearchFinished(QNetworkReply* reply) {
             QMap<QString, QString> existingData = existingItem->data(Qt::UserRole).value<QMap<QString, QString>>();
             
             if (existingData["name"].contains("Unknown Game", Qt::CaseInsensitive) || existingData["name"] == id) {
-                QString statusText = supported ? "Supported" : "Not Indexed";
+                QString statusText = supported ? "Supported" : "Not Indexed • Supports Auto Generate";
                 existingItem->setText(QString("%1\n%2 • ID: %3").arg(name).arg(statusText).arg(id));
                 
                 existingData["name"] = name;
@@ -495,7 +495,7 @@ void MainWindow::onSearchFinished(QNetworkReply* reply) {
             }
         } else {
             // Add new item
-            QString statusText = supported ? "Supported" : "Not Indexed";
+            QString statusText = supported ? "Supported" : "Not Indexed • Supports Auto Generate";
             QString displayText = QString("%1\n%2 • ID: %3").arg(name).arg(statusText).arg(id);
             
             QListWidgetItem* listItem = new QListWidgetItem(displayText);
@@ -537,7 +537,7 @@ QIcon MainWindow::createStatusIcon(bool supported) {
     
     // Color & Shape
     QColor color = supported ? Colors::toQColor(Colors::ACCENT_GREEN) 
-                             : Colors::toQColor(Colors::ACCENT_RED);
+                             : Colors::toQColor(Colors::ACCENT_BLUE);
     QColor bgColor = color;
     bgColor.setAlpha(40);
     
@@ -555,7 +555,7 @@ QIcon MainWindow::createStatusIcon(bool supported) {
     QFont font("Segoe UI Symbol", 28, QFont::Bold);
     painter.setFont(font);
     painter.setPen(color);
-    QString symbol = supported ? "✓" : "✕";
+    QString symbol = supported ? "✓" : "⚙";
     painter.drawText(pixmap.rect(), Qt::AlignCenter, symbol);
     
     return QIcon(pixmap);
@@ -593,7 +593,7 @@ void MainWindow::displayResults(const QJsonArray& items) {
         }
 
         
-        QString statusText = supported ? "Supported" : "Not Indexed";
+        QString statusText = supported ? "Supported" : "Not Indexed • Supports Auto Generate";
         QString displayText = QString("%1\n%2 • ID: %3")
                              .arg(name).arg(statusText).arg(appid);
         
