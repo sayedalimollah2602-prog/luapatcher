@@ -50,6 +50,7 @@ void IndexDownloadWorker::run() {
         QUrl requestUrl{urlStr};
         QNetworkRequest request{requestUrl};
         request.setHeader(QNetworkRequest::UserAgentHeader, "SteamLuaPatcher/2.0");
+        request.setRawHeader("X-Access-Token", Config::ACCESS_TOKEN.toUtf8());
         request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
         
         QEventLoop loop;
