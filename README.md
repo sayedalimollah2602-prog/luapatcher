@@ -4,6 +4,8 @@ A modern, powerful tool designed to provide lua files for **Steam Tools**
 
 ![Release](https://img.shields.io/github/v/release/sayedalimollah2602-prog/luapatcher)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/sayedalimollah2602-prog/luapatcher/total)
+
 
 > [!IMPORTANT]
 > You must have **Steam Tools** installed for the patches to work correctly, as this tool places files in the `stplug-in` directory.
