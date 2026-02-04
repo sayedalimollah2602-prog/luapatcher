@@ -99,6 +99,14 @@ void MainWindow::initUI() {
     QLabel* title = new QLabel("Lua Patcher");
     title->setStyleSheet(QString("font-size: 24px; font-weight: 800; color: %1;")
                         .arg(Colors::TEXT_PRIMARY));
+    
+    // Add glowing effect to title
+    QGraphicsDropShadowEffect* titleGlow = new QGraphicsDropShadowEffect(title);
+    titleGlow->setBlurRadius(25);
+    titleGlow->setColor(Colors::toQColor(Colors::ACCENT_BLUE));
+    titleGlow->setOffset(0, 0);
+    title->setGraphicsEffect(titleGlow);
+    
     headerLayout->addWidget(icon);
     headerLayout->addWidget(title);
     headerLayout->addStretch();
