@@ -285,8 +285,7 @@ void MainWindow::onSyncDone(QList<GameInfo> games) {
     m_supportedGames = games;
     m_spinner->stop();
     m_stack->setCurrentIndex(1); // List
-    m_statusLabel->setText(QString("Online • %1 supported games")
-                          .arg(games.size()));
+    m_statusLabel->setText("Ready");
     m_searchInput->setFocus();
     
     // Trigger initial empty search to show list if needed, or just clear
