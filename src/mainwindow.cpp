@@ -97,8 +97,20 @@ void MainWindow::initUI() {
     icon->setStyleSheet(QString("font-size: 32px; color: %1; font-weight: bold;")
                        .arg(Colors::ACCENT_BLUE));
     QLabel* title = new QLabel("Lua Patcher");
-    title->setStyleSheet(QString("font-size: 24px; font-weight: 800; color: %1;")
-                        .arg(Colors::TEXT_PRIMARY));
+    
+    // Create faded gradient effect using Palette
+    QLinearGradient textGrad(0, 0, 150, 0); // Horizontal gradient
+    textGrad.setColorAt(0, Colors::toQColor(Colors::TEXT_PRIMARY));
+    textGrad.setColorAt(0.7, Colors::toQColor(Colors::TEXT_PRIMARY));
+    textGrad.setColorAt(1.0, QColor(Colors::toQColor(Colors::TEXT_PRIMARY).red(), 
+                                   Colors::toQColor(Colors::TEXT_PRIMARY).green(), 
+                                   Colors::toQColor(Colors::TEXT_PRIMARY).blue(), 
+                                   60)); // Fade out at end
+
+    QPalette palette = title->palette();
+    palette.setBrush(QPalette::WindowText, QBrush(textGrad));
+    title->setPalette(palette);
+    title->setStyleSheet("font-size: 24px; font-weight: 800;");
     
     // Add glowing effect to title
     QGraphicsDropShadowEffect* titleGlow = new QGraphicsDropShadowEffect(title);
