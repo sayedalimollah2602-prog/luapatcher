@@ -494,9 +494,11 @@ void MainWindow::onSearchFinished(QNetworkReply* reply) {
         
         // Re-check support status
         bool supported = false;
+        bool hasFix = false;
         for(const auto& g : m_supportedGames) {
             if(g.id == id) {
-                supported = true; 
+                supported = true;
+                hasFix = g.hasFix;
                 break;
             }
         }
@@ -512,6 +514,7 @@ void MainWindow::onSearchFinished(QNetworkReply* reply) {
                 
                 existingData["name"] = name;
                 existingData["supported"] = supported ? "true" : "false";
+                existingData["hasFix"] = hasFix ? "true" : "false";
                 existingItem->setData(Qt::UserRole, QVariant::fromValue(existingData));
                 
                 existingItem->setIcon(createStatusIcon(supported));
@@ -533,6 +536,7 @@ void MainWindow::onSearchFinished(QNetworkReply* reply) {
             data["name"] = name;
             data["appid"] = id;
             data["supported"] = supported ? "true" : "false";
+            data["hasFix"] = hasFix ? "true" : "false";
             listItem->setData(Qt::UserRole, QVariant::fromValue(data));
             
             listItem->setIcon(createStatusIcon(supported));

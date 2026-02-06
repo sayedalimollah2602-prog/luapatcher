@@ -18,8 +18,6 @@ add_definitions(-DSERVER_ACCESS_TOKEN="${ACCESS_TOKEN}")
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network)
 
 # Application icon resource (optional)
-# Application icon resource (optional)
-# Application icon resource (optional)
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/app.rc")
     set(APP_ICON_RESOURCE_WINDOWS "${CMAKE_CURRENT_SOURCE_DIR}/app.rc")
 else()

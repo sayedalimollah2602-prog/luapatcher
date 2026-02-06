@@ -49,3 +49,4 @@ qrc_*.cpp
 /webserver/games
 webserver/games_index.json
 webserver/fetch_progress.json
+/webserver/__pycache__
