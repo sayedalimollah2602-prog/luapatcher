@@ -1,38 +1,96 @@
-# Steam Lua Patcher
+<div align="center">
 
-A modern, powerful tool designed to provide lua files for **Steam Tools**
+# ⚡ Steam Lua Patcher
 
-![Release](https://img.shields.io/github/v/release/sayedalimollah2602-prog/luapatcher)
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/sayedalimollah2602-prog/luapatcher/total)
+**Unlock the full potential of your Steam games with automated Lua patching.**
 
+![Release](https://img.shields.io/github/v/release/sayedalimollah2602-prog/luapatcher?style=for-the-badge&color=blueviolet)
+![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
+![Downloads](https://img.shields.io/github/downloads/sayedalimollah2602-prog/luapatcher/total?style=for-the-badge&color=success)
 
-> [!IMPORTANT]
-> You must have **Steam Tools** installed for the patches to work correctly, as this tool places files in the `stplug-in` directory.
+</div>
 
-## ✨ Features
+---
 
-- **Game Search**: Instantly search for supported games.
-- **One-Click Patching**: Automatically downloads and places Lua patch files in the correct Steam directory (`steam/config/stplug-in`).
-- **Steam Integration**: Includes a built-in utility to restart Steam to apply changes immediately.
-- **Standalone**: Available as a single, portable `.exe` file. So just download and run no need to install it.
+## 🚀 Overview
 
-## 📥 Download & Usage
+**Steam Lua Patcher** is a modern, standalone tool designed to seamlessly manage Lua files for **Steam Tools**. It automates the process of finding, downloading, and installing patches, and now includes a powerful **Fix Manager** for games requiring extra file modifications.
 
-1.  **Download**: Get the latest `SteamLuaPatcher.exe` from the [Releases](../../releases) page.
-2.  **Run**: Double-click the executable. No installation is required.
-3.  **Patch**:
-    - Type the name or id of the game you want to patch.
-    - Click the **Patch** button.
-    - Once finished, click the **Restart Steam** button to apply changes.
+> [!NOTE]
+> **Steam Tools** must be installed for patches to work correctly. This tool automatically targets your `steam/config/stplug-in` directory.
+
+## ✨ Key Features
+
+### 🎮 Smart Patching
+- **Instant Search**: Find supported games by name or ID.
+- **Auto-Install**: One-click download and placement of Lua patches.
+- **Auto-Generate**: Generate patches for unsupported games instantly.
+
+### 🔧 Fix Manager (New!)
+- **Game Fixes**: Automatically detects if a game requires additional file fixes (e.g., corrupted files, missing assets).
+- **One-Click Apply**: Downloads and extracts fix files directly to your game installation folder.
+- **Smart Detection**: The "Apply Fix" button appears automatically when a fix is available for your selected game.
+
+### ⚡ Power Tools
+- **Restart Steam**: Built-in utility to restart Steam and apply changes immediately.
+- **Portable**: Single `.exe` file. No installation required.
+
+---
+
+## 📥 Getting Started
+
+1.  **Download** the latest `SteamLuaPatcher.exe` from [Releases](../../releases).
+2.  **Run** the executable (no install needed).
+3.  **Search** for your game.
+
+### How to Patch a Game
+1. Select a game from the list.
+2. Click **Patch Game**.
+3. Click **Restart Steam** to finalize.
+
+### How to Apply a Game Fix
+1. Search for a game (e.g., _Battlefield 4_).
+2. If a fix is available, an **Apply Fix** button will appear.
+3. Click **Apply Fix** and select your game's installation folder.
+4. The tool will download and extract the necessary files automatically.
+
+---
 
 ## 🏗️ Architecture
 
-### Project Structure
+- **Core**: C++ (Qt6) for high performance and native UI.
+- **Backend**: Python-based webserver for dynamic index generation.
+- **Safety**: Secure token authentication for API access.
 
-- **`src/`**: C++ source code for the GUI and logic.
-  - `mainwindow.cpp`: Main UI logic.
-  - `utils`: Few configs.
-  - `workers/`: Background threads for downloading files and restarting Steam.
-- **`webserver/`**: Python scripts for the backend index.
-  - `generate_index.py`: Fetches Game IDs and Names from Steam APIs to generate `games_index.json`.
+## ⭐ Support the Project
+
+If you find this tool useful, please give it a star on GitHub! It helps a lot!
+
+<div align="center">
+  <br>
+  <a href="https://github.com/sayedalimollah2602-prog/luapatcher">
+    <img src="https://img.shields.io/github/stars/sayedalimollah2602-prog/luapatcher?style=social&label=Star%20us%20on%20GitHub" alt="GitHub stars">
+  </a>
+  <br>
+</div>
+
+---
+
+## 📄 License
+
+This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
+
+---
+
+## 👥 Contributors
+
+A huge thanks to the core contributors who made this project possible:
+
+- **leVi** - Core Development & UI
+- **raxnmint** - Backend & Logic
+
+<br>
+
+<div align="center">
+<sub>Built with ❤️ by leVi & raxnmint</sub>
+</div>
