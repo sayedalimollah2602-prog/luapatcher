@@ -23,6 +23,8 @@ if not ACCESS_TOKEN or not ADMIN_PASSWORD:
 
 # Directory containing all Lua game files
 GAMES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'games')
+# Directory containing game fix zip files
+FIX_FILES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'game-fix-files')
 
 def require_token(f):
     @wraps(f)
@@ -77,12 +79,13 @@ def admin_panel():
                 for game in games:
                     game_id = game.get('id', 'N/A')
                     game_name = game.get('name', 'N/A')
-                    rows.append(f"<tr><td class='id-col'>{game_id}</td><td class='name-col'>{game_name}</td></tr>")
+                    has_fix = '✓' if game.get('has_fix', False) else ''
+                    rows.append(f"<tr><td class='id-col'>{game_id}</td><td class='name-col'>{game_name}</td><td class='fix-col'>{has_fix}</td></tr>")
                 games_list_html = "\n".join(rows)
         else:
-            games_list_html = "<tr><td colspan='2'>games_index.json not found</td></tr>"
+            games_list_html = "<tr><td colspan='3'>games_index.json not found</td></tr>"
     except Exception as e:
-        games_list_html = f"<tr><td colspan='2'>Error loading games: {str(e)}</td></tr>"
+        games_list_html = f"<tr><td colspan='3'>Error loading games: {str(e)}</td></tr>"
 
     return f"""
     <html>
@@ -90,7 +93,7 @@ def admin_panel():
             <title>Admin Panel - Steam Lua Patcher</title>
             <style>
                 body {{ font-family: 'Segoe UI', sans-serif; padding: 50px; background: #121212; color: #eee; }}
-                .container {{ max-width: 800px; margin: 0 auto; background: #1e1e1e; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }}
+                .container {{ max-width: 900px; margin: 0 auto; background: #1e1e1e; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }}
                 h1 {{ color: #bb86fc; margin-bottom: 20px; }}
                 h2 {{ color: #03dac6; margin-top: 30px; margin-bottom: 10px; }}
                 .token-box {{ background: #2c2c2c; padding: 15px; border-radius: 4px; border: 1px solid #333; font-family: monospace; font-size: 1.2em; word-break: break-all; margin-bottom: 20px; }}
@@ -114,6 +117,7 @@ def admin_panel():
                 th {{ background-color: #2c2c2c; color: #bb86fc; }}
                 tr:hover {{ background-color: #2a2a2a; }}
                 .id-col {{ width: 150px; font-family: monospace; color: #03dac6; }}
+                .fix-col {{ width: 60px; text-align: center; color: #bb86fc; }}
             </style>
         </head>
         <body>
@@ -130,6 +134,7 @@ def admin_panel():
                         <tr>
                             <th>ID</th>
                             <th>Name</th>
+                            <th>Fix</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -180,6 +185,20 @@ def serve_lua(filename):
         abort(404, description=f"Lua file '{filename}' not found")
     
     return send_from_directory(GAMES_DIR, filename, mimetype='text/plain')
+
+
+@app.route('/fix/<filename>')
+@require_token
+def serve_fix(filename):
+    """Serve a game fix zip file by filename (e.g., 1238860.zip)"""
+    if not filename.endswith('.zip'):
+        filename = f"{filename}.zip"
+    
+    file_path = os.path.join(FIX_FILES_DIR, filename)
+    if not os.path.exists(file_path):
+        abort(404, description=f"Fix file '{filename}' not found")
+    
+    return send_from_directory(FIX_FILES_DIR, filename, mimetype='application/zip')
 
 
 @app.route('/api/games_index.json')

@@ -25,6 +25,10 @@ namespace Config {
         return WEBSERVER_BASE_URL + "/lua/";
     }
     
+    inline QString gameFixUrl() {
+        return WEBSERVER_BASE_URL + "/fix/";
+    }
+    
     // Steam paths - check all drives for Steam installation
     inline QStringList getAllSteamPluginDirs() {
         QStringList paths;

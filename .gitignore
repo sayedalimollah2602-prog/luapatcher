@@ -47,3 +47,5 @@ qrc_*.cpp
 *.bak
 *.backup
 /webserver/games
+webserver/games_index.json
+webserver/fetch_progress.json

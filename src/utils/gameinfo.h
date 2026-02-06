@@ -6,6 +6,7 @@
 struct GameInfo {
     QString id;
     QString name;
+    bool hasFix = false;
     
     bool operator==(const GameInfo& other) const {
         return id == other.id;

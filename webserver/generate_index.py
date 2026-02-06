@@ -14,6 +14,8 @@ import requests
 import time
 import signal
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 # Get Steam API key from environment variable (optional but recommended)
 STEAM_API_KEY = os.environ.get('STEAM_API_KEY', '')
@@ -21,16 +23,34 @@ STEAM_API_KEY = os.environ.get('STEAM_API_KEY', '')
 # Maximum runtime in seconds (5 hours)
 MAX_RUNTIME_SECONDS = 5 * 60 * 60
 
+# === SPEED SETTINGS ===
+MAX_WORKERS = 10          # Number of parallel requests (increase for faster, decrease if rate limited)
+REQUEST_DELAY = 0.1       # Delay between batches (seconds) - reduce for faster
+BATCH_SIZE = 10           # How many to process before small delay
+
 # Global variables for graceful shutdown on CTRL+C
 _progress_file = None
 _extracted_names = {}
 _completed_ids = []
-_current_app_map = {}  # Base map before fetching new ones
+_current_app_map = {}
+_lock = threading.Lock()  # Thread-safe access to shared data
+_stop_flag = False        # Flag to stop all threads
 
 def save_games_index(app_map):
     """Generate and write the games_index.json file."""
     games_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'games')
+    fix_files_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'game-fix-files')
     games_list = []
+    
+    # Get list of available fix files
+    fix_files = set()
+    if os.path.exists(fix_files_dir):
+        for filename in os.listdir(fix_files_dir):
+            if filename.endswith('.zip'):
+                fix_files.add(filename[:-4])  # Remove .zip extension
+    
+    if fix_files:
+        print(f"Found {len(fix_files)} game fix files: {fix_files}")
     
     if os.path.exists(games_dir):
         for filename in os.listdir(games_dir):
@@ -40,10 +60,10 @@ def save_games_index(app_map):
                 
                 games_list.append({
                     "id": app_id,
-                    "name": name
+                    "name": name,
+                    "has_fix": app_id in fix_files
                 })
     
-    # Sort by name
     games_list.sort(key=lambda x: x['name'])
     
     index_data = {
@@ -52,7 +72,6 @@ def save_games_index(app_map):
         'last_updated': int(time.time())
     }
     
-    # Write to root of webserver folder
     output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'games_index.json')
     try:
         with open(output_path, 'w', encoding='utf-8') as f:
@@ -65,25 +84,25 @@ def save_games_index(app_map):
 
 def signal_handler(signum, frame):
     """Handle CTRL+C by saving progress and exiting gracefully."""
+    global _stop_flag
+    _stop_flag = True
     print(f"\n\n=== INTERRUPTED (CTRL+C) ===")
     
-    # 1. Save fetch progress (for resuming)
     if _progress_file and (_extracted_names or _completed_ids):
         print("Saving fetch progress...")
         try:
-            with open(_progress_file, 'w') as f:
-                json.dump({
-                    'names': _extracted_names,
-                    'completed_ids': _completed_ids
-                }, f)
+            with _lock:
+                with open(_progress_file, 'w') as f:
+                    json.dump({
+                        'names': _extracted_names,
+                        'completed_ids': _completed_ids
+                    }, f)
             print(f"Saved {len(_extracted_names)} names to {_progress_file}")
         except Exception as e:
             print(f"Error saving progress: {e}")
 
-    # 2. Save games_index.json with what we have so far
     print("Updating games_index.json with collected data...")
     try:
-        # Merge base map with extracted names
         final_map = _current_app_map.copy()
         final_map.update(_extracted_names)
         save_games_index(final_map)
@@ -93,7 +112,6 @@ def signal_handler(signum, frame):
     print("Exiting...")
     sys.exit(0)
 
-# Register signal handler
 signal.signal(signal.SIGINT, signal_handler)
 
 def load_existing_games_index():
@@ -105,7 +123,6 @@ def load_existing_games_index():
         try:
             with open(index_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                # Build a map of id -> name, excluding "Unknown Game" entries
                 existing = {}
                 for game in data.get('games', []):
                     name = game.get('name', '')
@@ -122,10 +139,9 @@ def get_steam_app_map():
     print("Fetching Steam App List...")
     
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
     }
     
-    # Build URL list - prioritize API key URL if available
     urls = []
     if STEAM_API_KEY:
         urls.append(f"https://api.steampowered.com/ISteamApps/GetAppList/v2/?key={STEAM_API_KEY}")
@@ -138,7 +154,6 @@ def get_steam_app_map():
 
     for url in urls:
         try:
-            # Don't print full URL if it contains API key
             display_url = url.split('?')[0] + ('?key=***' if 'key=' in url else '')
             print(f"Trying {display_url}...")
             response = requests.get(url, headers=headers, timeout=30)
@@ -146,12 +161,9 @@ def get_steam_app_map():
                 data = response.json()
                 app_map = {}
                 
-                # Handle different JSON structures
                 apps = []
                 if 'applist' in data and 'apps' in data['applist']:
                     apps = data['applist']['apps']
-                elif 'applist' in data and 'apps' in data:
-                     apps = data['applist']['apps']
                 elif 'apps' in data:
                     apps = data['apps']
                 elif isinstance(data, list):
@@ -167,25 +179,67 @@ def get_steam_app_map():
                 return app_map
             else:
                 print(f"Failed with status {response.status_code}")
-                # print(f"Response: {response.text[:300]}") # Less verbose if failing
         except Exception as e:
             print(f"Error fetching from {url}: {e}")
             
     print("All Steam App List URLs failed.")
     return {}
 
+def fetch_single_app(app_id):
+    """Fetch a single app's name from multiple sources. Returns (app_id, name or None)."""
+    global _stop_flag
+    
+    if _stop_flag:
+        return (app_id, None)
+    
+    sources = [
+        ("Store", f"https://store.steampowered.com/api/appdetails?appids={app_id}"),
+        ("SteamSpy", f"https://steamspy.com/api.php?request=appdetails&appid={app_id}")
+    ]
+    
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    }
+    
+    for source_name, url in sources:
+        if _stop_flag:
+            return (app_id, None)
+            
+        try:
+            response = requests.get(url, headers=headers, timeout=5)  # Reduced timeout
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                if source_name == "Store":
+                    if data and str(app_id) in data:
+                        details = data[str(app_id)]
+                        if details.get("success") and "data" in details:
+                            return (app_id, details["data"]["name"])
+                            
+                elif source_name == "SteamSpy":
+                    if data and "name" in data:
+                        return (app_id, data["name"])
+                        
+            elif response.status_code == 429:
+                time.sleep(2)  # Reduced wait on rate limit
+                
+        except Exception:
+            pass
+    
+    return (app_id, None)
+
 def fetch_names_from_store_api(app_ids):
-    """Fetch specific app names from the Store API if bulk list fails."""
-    global _progress_file, _extracted_names, _completed_ids
+    """Fetch specific app names using parallel requests."""
+    global _progress_file, _extracted_names, _completed_ids, _stop_flag
     
     if not app_ids:
         return {}
     
-    # Progress file for resumability
     script_dir = os.path.dirname(os.path.abspath(__file__))
     _progress_file = os.path.join(script_dir, 'fetch_progress.json')
     
-    # Load existing progress if available
+    # Load existing progress
     _extracted_names = {}
     if os.path.exists(_progress_file):
         try:
@@ -193,7 +247,6 @@ def fetch_names_from_store_api(app_ids):
                 progress_data = json.load(f)
                 _extracted_names = progress_data.get('names', {})
                 completed_ids_set = set(progress_data.get('completed_ids', []))
-                # Filter out already completed IDs
                 remaining_ids = [aid for aid in app_ids if aid not in completed_ids_set]
                 print(f"Resuming from progress file. Already fetched: {len(completed_ids_set)} names.")
                 app_ids = remaining_ids
@@ -203,183 +256,127 @@ def fetch_names_from_store_api(app_ids):
     if not app_ids:
         print("All apps already fetched from previous run.")
         return _extracted_names
-        
-    print(f"Attempting to fetch {len(app_ids)} missing game names from Store API (one by one)...")
-    print(f"Estimated time: ~{len(app_ids) * 1.5 / 60:.1f} minutes (with rate limiting)")
-    print(f"Maximum runtime: 5 hours (will auto-stop and save progress)")
-    print(f"Press CTRL+C anytime to save progress and exit.\n")
-    
-    base_url = "https://store.steampowered.com/api/appdetails"
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    }
-    
-    _completed_ids = list(_extracted_names.keys())
     
     total = len(app_ids)
-    save_interval = 100  # Save progress every 100 games
-    start_time = time.time()  # Track start time for timeout
+    print(f"\n{'='*60}")
+    print(f"FAST PARALLEL FETCHING: {total} games")
+    print(f"Workers: {MAX_WORKERS} | Delay: {REQUEST_DELAY}s | Batch: {BATCH_SIZE}")
+    print(f"Estimated time: ~{total / MAX_WORKERS * 0.5 / 60:.1f} minutes")
+    print(f"{'='*60}\n")
     
-    for i, app_id in enumerate(app_ids):
-        # Progress indication
-        progress_pct = (i + 1) / total * 100
-        print(f"[{progress_pct:.1f}%] Fetching {i + 1}/{total}: AppID {app_id}...", end=" ")
+    _completed_ids = list(_extracted_names.keys())
+    start_time = time.time()
+    completed_count = 0
+    success_count = 0
+    save_interval = 50
+    
+    # Use ThreadPoolExecutor for parallel requests
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        # Submit all tasks
+        future_to_id = {executor.submit(fetch_single_app, app_id): app_id for app_id in app_ids}
         
-        # Define sources to try in order
-        # Source 1: Steam Store API (Official, reliable but rate limited)
-        # Source 2: SteamSpy API (Unofficial, good fallback)
-        sources = [
-            ("Store", f"https://store.steampowered.com/api/appdetails?appids={app_id}"),
-            ("SteamSpy", f"https://steamspy.com/api.php?request=appdetails&appid={app_id}")
-        ]
-        
-        fetched_name = None
-        
-        for source_name, url in sources:
+        for future in as_completed(future_to_id):
+            if _stop_flag:
+                break
+                
+            app_id = future_to_id[future]
+            completed_count += 1
+            
             try:
-                # Different headers/params might be needed per source
-                # Common headers
-                req_headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                }
+                result_id, name = future.result()
                 
-                # Fetch
-                response = requests.get(url, headers=req_headers, timeout=10)
-                
-                if response.status_code == 200:
-                    data = response.json()
+                with _lock:
+                    _completed_ids.append(result_id)
                     
-                    # Parse based on source
-                    if source_name == "Store":
-                        if data and str(app_id) in data:
-                            details = data[str(app_id)]
-                            if details.get("success") and "data" in details:
-                                fetched_name = details["data"]["name"]
-                                
-                    elif source_name == "SteamSpy":
-                        # SteamSpy format: {"appid": 123, "name": "Game Name", ...}
-                        if data and "name" in data:
-                            fetched_name = data["name"]
-                            
-                    if fetched_name:
-                        print(f"-> Found via {source_name}: {fetched_name}")
-                        _extracted_names[str(app_id)] = fetched_name
-                        break # Stop trying sources
+                    if name:
+                        _extracted_names[str(result_id)] = name
+                        success_count += 1
+                        status = f"✓ {name[:40]}"
+                    else:
+                        status = "✗ Failed"
                 
-                elif response.status_code == 429:
-                     print(f"-> {source_name} Rate Limit! Waiting 10s...", end=" ")
-                     time.sleep(10)
-                else:
-                    # Fail silently for this source, try next
-                    pass
-
+                # Progress bar
+                progress_pct = completed_count / total * 100
+                elapsed = time.time() - start_time
+                rate = completed_count / elapsed if elapsed > 0 else 0
+                eta = (total - completed_count) / rate if rate > 0 else 0
+                
+                print(f"[{progress_pct:5.1f}%] {completed_count}/{total} | "
+                      f"{rate:.1f}/s | ETA: {eta:.0f}s | {app_id}: {status}")
+                
+                # Save progress periodically
+                if completed_count % save_interval == 0:
+                    with _lock:
+                        with open(_progress_file, 'w') as f:
+                            json.dump({
+                                'names': _extracted_names,
+                                'completed_ids': _completed_ids
+                            }, f)
+                    print(f"--- Progress saved ({success_count} names) ---")
+                
+                # Check timeout
+                if elapsed >= MAX_RUNTIME_SECONDS:
+                    print(f"\n=== 5 HOUR TIMEOUT ===")
+                    _stop_flag = True
+                    break
+                    
             except Exception as e:
-                # Error with this source, try next
-                pass
-        
-        if not fetched_name:
-             print("-> Failed (all sources)")
-        
-        _completed_ids.append(app_id)
-        
-        # Save progress periodically
-        if (i + 1) % save_interval == 0:
-            elapsed = time.time() - start_time
-            elapsed_hours = elapsed / 3600
-            print(f"\n--- Saving progress ({len(_extracted_names)} names fetched, {elapsed_hours:.1f}h elapsed) ---\n")
-            with open(_progress_file, 'w') as f:
-                json.dump({
-                    'names': _extracted_names,
-                    'completed_ids': _completed_ids
-                }, f)
-        
-        # Check for timeout (5 hours)
-        elapsed = time.time() - start_time
-        if elapsed >= MAX_RUNTIME_SECONDS:
-            print(f"\n\n=== 5 HOUR TIMEOUT REACHED ===")
-            print(f"Saving progress and exiting...")
-            
-            # 1. Save fetch progress
-            with open(_progress_file, 'w') as f:
-                json.dump({
-                    'names': _extracted_names,
-                    'completed_ids': _completed_ids
-                }, f)
-                
-            # 2. Save games_index.json
-            # Merge base map with extracted names
-            final_map = _current_app_map.copy()
-            final_map.update(_extracted_names)
-            save_games_index(final_map)
-
-            print(f"Saved {len(_extracted_names)} names. Run script again to continue.")
-            return _extracted_names
-            
-        time.sleep(1)  # Rate limit protection (1 second between requests)
+                print(f"Error processing {app_id}: {e}")
     
     # Final save
-    with open(_progress_file, 'w') as f:
-        json.dump({
-            'names': _extracted_names,
-            'completed_ids': _completed_ids
-        }, f)
-    print(f"\nCompleted! Fetched {len(_extracted_names)} names total.")
+    with _lock:
+        with open(_progress_file, 'w') as f:
+            json.dump({
+                'names': _extracted_names,
+                'completed_ids': _completed_ids
+            }, f)
+    
+    elapsed = time.time() - start_time
+    print(f"\n{'='*60}")
+    print(f"COMPLETED in {elapsed:.1f}s ({elapsed/60:.1f} min)")
+    print(f"Success: {success_count}/{completed_count} ({success_count/completed_count*100:.1f}%)")
+    print(f"{'='*60}\n")
     
     return _extracted_names
 
 def generate_index():
-    """Scan games directory and generate JSON index of all supported games with names."""
+    """Scan games directory and generate JSON index."""
     global _current_app_map
     games_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'games')
     
-    # Load existing names from games_index.json first (to avoid re-fetching)
     existing_names = load_existing_games_index()
-    
-    # Get mapping of AppID -> Name from Steam API
     app_map = get_steam_app_map()
     
-    # Merge: existing names take precedence (already verified)
-    # Then Steam API fills in the rest
     combined_map = {**app_map, **existing_names}
-    _current_app_map = combined_map  # Update global for signal handler
+    _current_app_map = combined_map
     
     print(f"Combined map has {len(combined_map)} game names")
     
-    games_list = []
     missing_ids = []
     
     if os.path.exists(games_dir):
-        # First pass: collect IDs and check what we have
         for filename in os.listdir(games_dir):
             if filename.endswith('.lua'):
                 app_id = filename[:-4]
-                
-                # Check if we have the name
                 if app_id not in combined_map:
                     missing_ids.append(app_id)
 
-    # Refined Logic for Fallback
     if missing_ids:
-        print(f"Found {len(missing_ids)} apps without names. Fetching all...")
+        print(f"Found {len(missing_ids)} apps without names. Fetching...")
         
-        # Prioritize Forza Horizon 4 if missing
         ids_to_fetch = []
         if "1293830" in missing_ids:
             ids_to_fetch.append("1293830")
             missing_ids.remove("1293830")
         
-        # Fetch ALL missing apps (no limit)
         ids_to_fetch.extend(missing_ids)
-            
         fetched_names = fetch_names_from_store_api(ids_to_fetch)
         combined_map.update(fetched_names)
-        _current_app_map = combined_map # Update global again
+        _current_app_map = combined_map
     else:
         print("No missing game names to fetch!")
 
-    # Build and save final list using helper
     save_games_index(combined_map)
-    
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'games_index.json')
 
 if __name__ == '__main__':

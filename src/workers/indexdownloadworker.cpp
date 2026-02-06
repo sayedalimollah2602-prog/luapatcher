@@ -98,7 +98,7 @@ void IndexDownloadWorker::run() {
         QJsonArray arr = indexData["games"].toArray();
         for (const QJsonValue& val : arr) {
             QJsonObject obj = val.toObject();
-            games.append({obj["id"].toString(), obj["name"].toString()});
+            games.append({obj["id"].toString(), obj["name"].toString(), obj["has_fix"].toBool(false)});
         }
         
         emit finished(games);

@@ -25,6 +25,7 @@ class IndexDownloadWorker;
 class LuaDownloadWorker;
 class RestartWorker;
 class GeneratorWorker;
+class FixDownloadWorker;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -50,6 +51,7 @@ private slots:
     void onPatchError(QString error);
     void doRestart();
     void doGenerate();
+    void doApplyFix();
     void processNextNameFetch();
 
 private:
@@ -69,6 +71,7 @@ private:
     QProgressBar* m_progress;
     GlassButton* m_btnPatch;
     GlassButton* m_btnGenerate;
+    GlassButton* m_btnApplyFix;
     GlassButton* m_btnRestart;
     TerminalDialog* m_terminalDialog;
 
@@ -89,6 +92,7 @@ private:
     IndexDownloadWorker* m_syncWorker;
     LuaDownloadWorker* m_dlWorker;
     GeneratorWorker* m_genWorker;
+    FixDownloadWorker* m_fixWorker;
     RestartWorker* m_restartWorker;
     
     // Batch name fetching

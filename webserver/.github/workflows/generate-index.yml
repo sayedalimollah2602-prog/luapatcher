@@ -37,7 +37,9 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin main
+          git stash --include-untracked
+          git pull --rebase origin main || true
+          git stash pop || true
 
       - name: Commit and push updated index
         uses: stefanzweifel/git-auto-commit-action@v5

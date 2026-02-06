@@ -4,6 +4,7 @@
 #include "workers/indexdownloadworker.h"
 #include "workers/luadownloadworker.h"
 #include "workers/generatorworker.h"
+#include "workers/fixdownloadworker.h"
 #include "workers/restartworker.h"
 #include "utils/colors.h"
 #include "utils/paths.h"
@@ -23,6 +24,7 @@
 #include <QDir>
 #include <QPixmap>
 #include <QPainterPath>
+#include <QFileDialog>
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -151,6 +153,14 @@ void MainWindow::initUI() {
     m_btnGenerate->hide();
     connect(m_btnGenerate, &QPushButton::clicked, this, &MainWindow::doGenerate);
     leftCol->addWidget(m_btnGenerate);
+    
+    m_btnApplyFix = new GlassButton("🔧", "Apply Fix", 
+                                 "Download and apply game fix files",
+                                 Colors::ACCENT_PURPLE); // Purple for fix
+    m_btnApplyFix->setEnabled(false);
+    m_btnApplyFix->hide();
+    connect(m_btnApplyFix, &QPushButton::clicked, this, &MainWindow::doApplyFix);
+    leftCol->addWidget(m_btnApplyFix);
     
     m_btnRestart = new GlassButton("↻", "Restart Steam",
                                    "Apply changes by restarting Steam",
@@ -599,13 +609,22 @@ void MainWindow::displayResults(const QJsonArray& items) {
         bool supported = false;
         
         // If it came from local search, we know it's supported
+        bool hasFix = false;
         if (item.contains("supported_local")) {
             supported = true;
+            // Check if this game has a fix
+            for(const auto& g : m_supportedGames) {
+               if(g.id == appid) {
+                   hasFix = g.hasFix;
+                   break;
+               }
+           }
         } else {
             // Double check
              for(const auto& g : m_supportedGames) {
                if(g.id == appid) {
-                   supported = true; 
+                   supported = true;
+                   hasFix = g.hasFix;
                    break;
                }
            }
@@ -623,6 +642,7 @@ void MainWindow::displayResults(const QJsonArray& items) {
         data["name"] = name;
         data["appid"] = appid;
         data["supported"] = supported ? "true" : "false";
+        data["hasFix"] = hasFix ? "true" : "false";
         listItem->setData(Qt::UserRole, QVariant::fromValue(data));
         
         listItem->setIcon(createStatusIcon(supported));
@@ -657,8 +677,20 @@ void MainWindow::onGameSelected(QListWidgetItem* item) {
     QMap<QString, QString> data = item->data(Qt::UserRole)
                                       .value<QMap<QString, QString>>();
     
+    m_selectedGame = data;
+    bool hasFix = (data["hasFix"] == "true");
+    
+    // Show/hide Apply Fix button based on hasFix
+    if (hasFix) {
+        m_btnApplyFix->setEnabled(true);
+        m_btnApplyFix->show();
+        m_btnApplyFix->setDescription(QString("Apply fix for %1").arg(data["name"]));
+    } else {
+        m_btnApplyFix->setEnabled(false);
+        m_btnApplyFix->hide();
+    }
+    
     if (data["supported"] == "true") {
-        m_selectedGame = data;
         m_btnPatch->setEnabled(true);
         m_btnPatch->setDescription(QString("Install patch for %1")
                                   .arg(data["name"]));
@@ -666,7 +698,6 @@ void MainWindow::onGameSelected(QListWidgetItem* item) {
         
         m_btnGenerate->hide();
     } else {
-        m_selectedGame = data; // Keep selected game even if unsupported so we can generate
         m_selectedGame["supported"] = "false"; // Explicitly mark
         
         m_btnPatch->setEnabled(false);
@@ -880,6 +911,63 @@ void MainWindow::doRestart() {
     connect(m_restartWorker, &RestartWorker::finished,
             m_statusLabel, &QLabel::setText);
     m_restartWorker->start();
+}
+
+void MainWindow::doApplyFix() {
+    if (m_selectedGame.isEmpty()) return;
+    
+    // Prompt user to select the game installation folder
+    QString gamePath = QFileDialog::getExistingDirectory(
+        this,
+        QString("Select Game Folder for %1").arg(m_selectedGame["name"]),
+        QString(),
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
+    );
+    
+    if (gamePath.isEmpty()) {
+        m_statusLabel->setText("Fix cancelled - no folder selected");
+        return;
+    }
+    
+    m_btnApplyFix->setEnabled(false);
+    m_progress->setValue(0);
+    
+    // Setup Terminal Dialog
+    m_terminalDialog->clear();
+    m_terminalDialog->appendLog(QString("Initializing fix for: %1").arg(m_selectedGame["name"]), "INFO");
+    m_terminalDialog->appendLog(QString("Target folder: %1").arg(gamePath), "INFO");
+    m_terminalDialog->show();
+    
+    m_fixWorker = new FixDownloadWorker(m_selectedGame["appid"], gamePath, this);
+    
+    // Connect Signals
+    connect(m_fixWorker, &FixDownloadWorker::finished,
+            this, [this](QString path) {
+                m_progress->hide();
+                m_btnApplyFix->setEnabled(true);
+                m_statusLabel->setText("Fix Applied Successfully!");
+                m_terminalDialog->setFinished(true);
+            });
+            
+    connect(m_fixWorker, &FixDownloadWorker::progress,
+            [this](qint64 downloaded, qint64 total) {
+                if (total > 0) {
+                    m_progress->setValue(static_cast<int>(downloaded * 100 / total));
+                }
+            });
+            
+    connect(m_fixWorker, &FixDownloadWorker::status,
+            [this](QString msg) {
+                m_statusLabel->setText(msg);
+            });
+            
+    connect(m_fixWorker, &FixDownloadWorker::log, 
+            m_terminalDialog, &TerminalDialog::appendLog);
+            
+    connect(m_fixWorker, &FixDownloadWorker::error,
+            this, &MainWindow::onPatchError);
+            
+    m_fixWorker->start();
 }
 
 void MainWindow::cancelNameFetches() {
