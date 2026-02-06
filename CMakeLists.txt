@@ -42,6 +42,7 @@ set(SOURCES
     src/workers/indexdownloadworker.cpp
     src/workers/luadownloadworker.cpp
     src/workers/generatorworker.cpp
+    src/workers/fixdownloadworker.cpp
     src/workers/restartworker.cpp
     src/utils/paths.cpp
     src/utils/colors.cpp
@@ -55,6 +56,7 @@ set(HEADERS
     src/workers/indexdownloadworker.h
     src/workers/luadownloadworker.h
     src/workers/generatorworker.h
+    src/workers/fixdownloadworker.h
     src/workers/restartworker.h
     src/utils/paths.h
     src/utils/colors.h
