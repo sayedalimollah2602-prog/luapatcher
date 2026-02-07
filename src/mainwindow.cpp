@@ -96,7 +96,14 @@ void MainWindow::initUI() {
     // ---------------------------------------------------------
     QWidget* sidebarWidget = new QWidget();
     sidebarWidget->setFixedWidth(200);
-    sidebarWidget->setStyleSheet("background-color: rgba(20, 20, 30, 0.95); border-right: 1px solid rgba(255, 255, 255, 0.1);");
+    // Use a semi-transparent background with a blur effect if possible, 
+    // or just the same glass background color as buttons but slightly different
+    QString sidebarStyle = QString(
+        "background-color: %1;" 
+        "border-right: 1px solid %2;"
+    ).arg(Colors::GLASS_BG).arg(Colors::GLASS_BORDER); // Use GLASS_BG for consistent look
+    
+    sidebarWidget->setStyleSheet(sidebarStyle);
     
     QVBoxLayout* sidebarLayout = new QVBoxLayout(sidebarWidget);
     sidebarLayout->setContentsMargins(15, 25, 15, 25);
@@ -993,19 +1000,33 @@ void MainWindow::switchMode(AppMode mode) {
 void MainWindow::populateFixList() {
     m_statusLabel->setText("Listing available fixes...");
     cancelNameFetches();
+    m_pendingNameFetchIds.clear();
     
     QJsonArray fixGames;
     for (const auto& game : m_supportedGames) {
         if (game.hasFix) {
             QJsonObject item;
             item["id"] = game.id;
-            item["name"] = game.name;
+            
+            // If name is missing or is just the ID, fetch it
+            if (game.name.isEmpty() || game.name == game.id || game.name == "Unknown Game") {
+                 item["name"] = "Loading...";
+                 m_pendingNameFetchIds.append(game.id);
+            } else {
+                 item["name"] = game.name;
+            }
+            
             item["supported_local"] = true; 
             fixGames.append(item);
         }
     }
     
     displayResults(fixGames);
+    
+    // Trigger fetch for unknown names
+    if (!m_pendingNameFetchIds.isEmpty()) {
+        startBatchNameFetch();
+    }
     
     if (m_resultsList->count() > 0) {
         m_statusLabel->setText(QString("Found %1 available fixes").arg(m_resultsList->count()));
@@ -1026,6 +1047,8 @@ void MainWindow::updateModeUI() {
     } else {
         m_tabLua->setActive(false);
         m_tabFix->setActive(true);
+        // We might want to refresh the list here if it's empty, 
+        // but switchMode already calls populateFixList
         m_stack->setCurrentIndex(1); 
     }
 }
