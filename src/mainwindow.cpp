@@ -28,6 +28,7 @@
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
+    , m_currentMode(AppMode::LuaPatcher)
     , m_networkManager(nullptr)
     , m_activeReply(nullptr)
     , m_currentSearchId(0)
@@ -85,104 +86,97 @@ void MainWindow::initUI() {
     QWidget* central = new QWidget(this);
     setCentralWidget(central);
     
-    QHBoxLayout* mainLayout = new QHBoxLayout(central);
-    mainLayout->setContentsMargins(40, 40, 40, 40);
+    // Root Layout (Vertical)
+    QVBoxLayout* rootLayout = new QVBoxLayout(central);
+    rootLayout->setContentsMargins(0, 0, 0, 0);
+    rootLayout->setSpacing(0);
+    
+    // ---------------------------------------------------------
+    // 1. Global Header
+    // ---------------------------------------------------------
+    QWidget* headerWidget = new QWidget();
+    headerWidget->setStyleSheet("background-color: rgba(20, 20, 30, 0.95); border-bottom: 1px solid rgba(255, 255, 255, 0.1);");
+    QHBoxLayout* headerLayout = new QHBoxLayout(headerWidget);
+    headerLayout->setContentsMargins(20, 15, 20, 15);
+    headerLayout->setSpacing(20);
+    
+    // Icon & Title
+    QLabel* icon = new QLabel("⚡");
+    icon->setStyleSheet(QString("font-size: 28px; color: %1; font-weight: bold; background: transparent; border: none;").arg(Colors::ACCENT_BLUE));
+    
+    QLabel* title = new QLabel("Lua Patcher");
+    title->setStyleSheet("font-size: 20px; font-weight: 800; color: #E2E8F0; background: transparent; border: none;");
+    
+    headerLayout->addWidget(icon);
+    headerLayout->addWidget(title);
+    headerLayout->addSpacing(40);
+    
+    // Tabs (Navigation)
+    m_tabLua = new GlassButton("⬇", "Lua Patcher", "", Colors::ACCENT_BLUE);
+    m_tabLua->setFixedSize(160, 45);
+    connect(m_tabLua, &QPushButton::clicked, this, [this](){ switchMode(AppMode::LuaPatcher); });
+    
+    m_tabFix = new GlassButton("🔧", "Fix Manager", "", Colors::ACCENT_PURPLE); 
+    m_tabFix->setFixedSize(160, 45);
+    connect(m_tabFix, &QPushButton::clicked, this, [this](){ switchMode(AppMode::FixManager); });
+    
+    headerLayout->addWidget(m_tabLua);
+    headerLayout->addWidget(m_tabFix);
+    headerLayout->addStretch();
+    
+    rootLayout->addWidget(headerWidget);
+
+    // ---------------------------------------------------------
+    // 2. Content Area
+    // ---------------------------------------------------------
+    QWidget* contentWidget = new QWidget();
+    QHBoxLayout* mainLayout = new QHBoxLayout(contentWidget);
+    mainLayout->setContentsMargins(40, 30, 40, 30);
     mainLayout->setSpacing(40);
     
     // ─── LEFT COLUMN: ACTIONS ───
     QVBoxLayout* leftCol = new QVBoxLayout();
     leftCol->setSpacing(16);
     
-    // Header
-    QHBoxLayout* headerLayout = new QHBoxLayout();
-    QLabel* icon = new QLabel("⚡");
-    icon->setStyleSheet(QString("font-size: 32px; color: %1; font-weight: bold;")
-                       .arg(Colors::ACCENT_BLUE));
-    QLabel* title = new QLabel("Lua Patcher");
-    
-    // Create faded gradient effect using Palette
-    QLinearGradient textGrad(0, 0, 150, 0); // Horizontal gradient
-    textGrad.setColorAt(0, Colors::toQColor(Colors::TEXT_PRIMARY));
-    textGrad.setColorAt(0.7, Colors::toQColor(Colors::TEXT_PRIMARY));
-    textGrad.setColorAt(1.0, QColor(Colors::toQColor(Colors::TEXT_PRIMARY).red(), 
-                                   Colors::toQColor(Colors::TEXT_PRIMARY).green(), 
-                                   Colors::toQColor(Colors::TEXT_PRIMARY).blue(), 
-                                   60)); // Fade out at end
-
-    QPalette palette = title->palette();
-    palette.setBrush(QPalette::WindowText, QBrush(textGrad));
-    title->setPalette(palette);
-    title->setStyleSheet("font-size: 24px; font-weight: 800;");
-    
-    // Add glowing effect to title
-    QGraphicsDropShadowEffect* titleGlow = new QGraphicsDropShadowEffect(title);
-    titleGlow->setBlurRadius(25);
-    titleGlow->setColor(Colors::toQColor(Colors::ACCENT_BLUE));
-    titleGlow->setOffset(0, 0);
-    title->setGraphicsEffect(titleGlow);
-    
-    headerLayout->addWidget(icon);
-    headerLayout->addWidget(title);
-    headerLayout->addStretch();
-    leftCol->addLayout(headerLayout);
-    
-    leftCol->addSpacing(20);
-    
     // Status
     m_statusLabel = new QLabel("Initializing...");
-    m_statusLabel->setStyleSheet(QString("color: %1; font-size: 13px;")
-                                .arg(Colors::TEXT_SECONDARY));
+    m_statusLabel->setStyleSheet(QString("color: %1; font-size: 13px;").arg(Colors::TEXT_SECONDARY));
     m_statusLabel->setWordWrap(true);
-    m_statusLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
     leftCol->addWidget(m_statusLabel);
     
     leftCol->addStretch();
     
     // Buttons
-    m_btnPatch = new GlassButton("⬇", "Patch Game", 
-                                 "Install Lua patch for selected game",
-                                 Colors::ACCENT_GREEN);
+    m_btnPatch = new GlassButton("⬇", "Patch Game", "Install Lua patch for selected game", Colors::ACCENT_GREEN);
     m_btnPatch->setEnabled(false);
     connect(m_btnPatch, &QPushButton::clicked, this, &MainWindow::doPatch);
     leftCol->addWidget(m_btnPatch);
     
-    m_btnGenerate = new GlassButton("⚙", "Generate Patch", 
-                                 "Fetch data for unknown game",
-                                 Colors::ACCENT_BLUE); // Blue for generate
+    m_btnGenerate = new GlassButton("⚙", "Generate Patch", "Fetch data for unknown game", Colors::ACCENT_BLUE);
     m_btnGenerate->setEnabled(false);
     m_btnGenerate->hide();
     connect(m_btnGenerate, &QPushButton::clicked, this, &MainWindow::doGenerate);
     leftCol->addWidget(m_btnGenerate);
     
-    m_btnApplyFix = new GlassButton("🔧", "Apply Fix", 
-                                 "Download and apply game fix files",
-                                 Colors::ACCENT_PURPLE); // Purple for fix
+    m_btnApplyFix = new GlassButton("🔧", "Apply Fix", "Download and apply game fix files", Colors::ACCENT_PURPLE);
     m_btnApplyFix->setEnabled(false);
     m_btnApplyFix->hide();
     connect(m_btnApplyFix, &QPushButton::clicked, this, &MainWindow::doApplyFix);
     leftCol->addWidget(m_btnApplyFix);
     
-    m_btnRestart = new GlassButton("↻", "Restart Steam",
-                                   "Apply changes by restarting Steam",
-                                   Colors::ACCENT_PURPLE);
+    m_btnRestart = new GlassButton("↻", "Restart Steam", "Apply changes by restarting Steam", Colors::ACCENT_PURPLE);
     connect(m_btnRestart, &QPushButton::clicked, this, &MainWindow::doRestart);
     leftCol->addWidget(m_btnRestart);
     
     leftCol->addStretch();
     
-    // Version
+    // Version & Creator
     QLabel* versionLabel = new QLabel(QString("v%1").arg(Config::APP_VERSION));
-    versionLabel->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: bold;")
-                               .arg(Colors::TEXT_SECONDARY));
+    versionLabel->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: bold;").arg(Colors::TEXT_SECONDARY));
     versionLabel->setAlignment(Qt::AlignCenter);
     leftCol->addWidget(versionLabel);
     
-    // Creator
-    QLabel* creatorLabel = new QLabel(
-        "created by <a href=\"https://github.com/sayedalimollah2602-prog\" "
-        "style=\"color: #94A3B8; text-decoration: none;\">leVI</a> & "
-        "<a href=\"https://github.com/raxnmint\" "
-        "style=\"color: #94A3B8; text-decoration: none;\">raxnmint</a>");
+    QLabel* creatorLabel = new QLabel("created by <a href=\"https://github.com/sayedalimollah2602-prog\" style=\"color: #94A3B8; text-decoration: none;\">leVI</a> & <a href=\"https://github.com/raxnmint\" style=\"color: #94A3B8; text-decoration: none;\">raxnmint</a>");
     creatorLabel->setStyleSheet("font-size: 11px;");
     creatorLabel->setAlignment(Qt::AlignCenter);
     creatorLabel->setOpenExternalLinks(true);
@@ -194,66 +188,31 @@ void MainWindow::initUI() {
     QVBoxLayout* rightCol = new QVBoxLayout();
     rightCol->setSpacing(16);
     
-    // Search Bar Layout
+    // Search Bar
     QHBoxLayout* searchLayout = new QHBoxLayout();
     searchLayout->setSpacing(8);
     
     m_searchInput = new QLineEdit();
     m_searchInput->setPlaceholderText("Find a game...");
-    connect(m_searchInput, &QLineEdit::textChanged, 
-            this, &MainWindow::onSearchChanged);
-    
-    // Add shadow to search input
+    connect(m_searchInput, &QLineEdit::textChanged, this, &MainWindow::onSearchChanged);
     QGraphicsDropShadowEffect* shadow = new QGraphicsDropShadowEffect(m_searchInput);
-    shadow->setBlurRadius(20);
-    shadow->setColor(QColor(0, 0, 0, 80));
-    shadow->setOffset(0, 4);
+    shadow->setBlurRadius(20); shadow->setColor(QColor(0, 0, 0, 80)); shadow->setOffset(0, 4);
     m_searchInput->setGraphicsEffect(shadow);
-    
     searchLayout->addWidget(m_searchInput);
     
-    // Refresh Button
     QPushButton* refreshBtn = new QPushButton("↻");
     refreshBtn->setFixedSize(36, 36);
     refreshBtn->setCursor(Qt::PointingHandCursor);
-    refreshBtn->setToolTip("Refresh search results");
-    refreshBtn->setStyleSheet(QString(
-        "QPushButton {"
-        "    background: %1;"
-        "    border: 1px solid %2;"
-        "    border-radius: 8px;"
-        "    font-size: 16px;"
-        "    font-weight: bold;"
-        "    color: %3;"
-        "}"
-        "QPushButton:hover {"
-        "    background: %4;"
-        "    border-color: %5;"
-        "}"
-        "QPushButton:pressed {"
-        "    background: %6;"
-        "}")
-        .arg(Colors::GLASS_BG)
-        .arg(Colors::GLASS_BORDER)
-        .arg(Colors::TEXT_PRIMARY)
-        .arg(Colors::GLASS_HOVER)
-        .arg(Colors::ACCENT_BLUE)
-        .arg(Colors::GLASS_BG));
+    refreshBtn->setStyleSheet(QString("QPushButton { background: %1; border: 1px solid %2; border-radius: 8px; font-size: 16px; font-weight: bold; color: %3; } QPushButton:hover { background: %4; border-color: %5; } QPushButton:pressed { background: %6; }").arg(Colors::GLASS_BG).arg(Colors::GLASS_BORDER).arg(Colors::TEXT_PRIMARY).arg(Colors::GLASS_HOVER).arg(Colors::ACCENT_BLUE).arg(Colors::GLASS_BG));
     connect(refreshBtn, &QPushButton::clicked, this, [this]() {
-        if (m_searchInput->text().trimmed().isEmpty()) {
-            startSync();  // Re-download game index
-        } else {
-            doSearch();   // Re-run current search
-        }
+        if (m_searchInput->text().trimmed().isEmpty()) startSync(); else doSearch();
     });
     searchLayout->addWidget(refreshBtn);
-    
     rightCol->addLayout(searchLayout);
     
     // Stack for Loading / List
     m_stack = new QStackedWidget();
     
-    // Loading Page
     QWidget* pageLoading = new QWidget();
     QVBoxLayout* layLoading = new QVBoxLayout(pageLoading);
     layLoading->setAlignment(Qt::AlignCenter);
@@ -261,40 +220,29 @@ void MainWindow::initUI() {
     layLoading->addWidget(m_spinner);
     m_stack->addWidget(pageLoading);
     
-    // Results Page
     m_resultsList = new QListWidget();
     m_resultsList->setIconSize(QSize(40, 40));
     m_resultsList->setWordWrap(true);
     m_resultsList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_resultsList->setTextElideMode(Qt::ElideNone);
-    connect(m_resultsList, &QListWidget::itemPressed,
-            this, &MainWindow::onGameSelected);
+    connect(m_resultsList, &QListWidget::itemPressed, this, &MainWindow::onGameSelected);
     m_stack->addWidget(m_resultsList);
-    
     rightCol->addWidget(m_stack);
     
-    // Progress Bar
     m_progress = new QProgressBar();
     m_progress->setFixedHeight(4);
     m_progress->setTextVisible(false);
-    m_progress->setStyleSheet(QString(
-        "QProgressBar {"
-        "    background: %1;"
-        "    border-radius: 2px;"
-        "}"
-        "QProgressBar::chunk {"
-        "    background: %2;"
-        "    border-radius: 2px;"
-        "}")
-        .arg(Colors::GLASS_BG)
-        .arg(Colors::ACCENT_GREEN));
+    m_progress->setStyleSheet(QString("QProgressBar { background: %1; border-radius: 2px; } QProgressBar::chunk { background: %2; border-radius: 2px; }").arg(Colors::GLASS_BG).arg(Colors::ACCENT_GREEN));
     m_progress->hide();
     rightCol->addWidget(m_progress);
     
     mainLayout->addLayout(rightCol, 65);
+    rootLayout->addWidget(contentWidget);
     
-    // Terminal Dialog
     m_terminalDialog = new TerminalDialog(this);
+    
+    // Trigger initial UI state
+    updateModeUI();
 }
 
 void MainWindow::startSync() {
@@ -358,6 +306,11 @@ void MainWindow::doSearch() {
     // 1. Local Search (Instant)
     QJsonArray localResults;
     for (const auto& game : m_supportedGames) {
+        // FILTER: If in Fix Manager mode, only show games with hasFix = true
+        if (m_currentMode == AppMode::FixManager && !game.hasFix) {
+            continue;
+        }
+
         if (game.name.contains(query, Qt::CaseInsensitive) || game.id == query) {
             QJsonObject item;
             item["id"] = game.id;
@@ -369,6 +322,18 @@ void MainWindow::doSearch() {
     
     // Display local results immediately
     displayResults(localResults);
+    
+    // In Fix Manager mode, we ONLY search local supported games (because we can't apply fix to unsupported games)
+    if (m_currentMode == AppMode::FixManager) {
+        if (m_resultsList->count() == 0) {
+            m_statusLabel->setText("No fixes found for this game");
+        } else {
+             m_statusLabel->setText(QString("Found %1 games with fixes").arg(m_resultsList->count()));
+        }
+        m_stack->setCurrentIndex(1);
+        m_spinner->stop();
+        return; 
+    }
     
     // Show spinner if we need remote data
     m_spinner->start();
@@ -678,40 +643,60 @@ void MainWindow::displayResults(const QJsonArray& items) {
 }
 
 void MainWindow::onGameSelected(QListWidgetItem* item) {
+    if (!item) {
+        m_selectedGame.clear();
+        m_btnPatch->setEnabled(false);
+        m_btnGenerate->hide();
+        m_btnApplyFix->hide();
+        m_statusLabel->setText("Ready");
+        return;
+    }
+
     QMap<QString, QString> data = item->data(Qt::UserRole)
                                       .value<QMap<QString, QString>>();
     
     m_selectedGame = data;
     bool hasFix = (data["hasFix"] == "true");
+    bool isSupported = (data["supported"] == "true");
     
-    // Show/hide Apply Fix button based on hasFix
-    if (hasFix) {
-        m_btnApplyFix->setEnabled(true);
-        m_btnApplyFix->show();
-        m_btnApplyFix->setDescription(QString("Apply fix for %1").arg(data["name"]));
-    } else {
-        m_btnApplyFix->setEnabled(false);
+    if (m_currentMode == AppMode::LuaPatcher) {
+        // Patcher Mode: Show Patch/Generate, Hide Fix
         m_btnApplyFix->hide();
+        m_btnPatch->show(); // Ensure visible in case it was hidden
+        
+        if (isSupported) {
+            m_btnPatch->setEnabled(true);
+            m_btnPatch->setDescription(QString("Install patch for %1").arg(data["name"]));
+            m_statusLabel->setText(QString("Selected: %1").arg(data["name"]));
+            
+            m_btnGenerate->hide();
+        } else {
+            m_selectedGame["supported"] = "false"; 
+            
+            m_btnPatch->setEnabled(false);
+            m_btnPatch->setDescription("Patch unavailable for this game");
+            
+            m_btnGenerate->setEnabled(true);
+            m_btnGenerate->show();
+            m_btnGenerate->setDescription(QString("Generate patch for %1").arg(data["name"]));
+            
+            m_statusLabel->setText("Game not supported (Generator available)");
+        }
     }
-    
-    if (data["supported"] == "true") {
-        m_btnPatch->setEnabled(true);
-        m_btnPatch->setDescription(QString("Install patch for %1")
-                                  .arg(data["name"]));
-        m_statusLabel->setText(QString("Selected: %1").arg(data["name"]));
-        
+    else if (m_currentMode == AppMode::FixManager) {
+        // Fix Mode: Hide Patch/Generate, Show Fix
+        m_btnPatch->hide();
         m_btnGenerate->hide();
-    } else {
-        m_selectedGame["supported"] = "false"; // Explicitly mark
         
-        m_btnPatch->setEnabled(false);
-        m_btnPatch->setDescription("Patch unavailable for this game");
-        
-        m_btnGenerate->setEnabled(true);
-        m_btnGenerate->show();
-        m_btnGenerate->setDescription(QString("Generate patch for %1").arg(data["name"]));
-        
-        m_statusLabel->setText("Game not supported (Generator available)");
+        if (hasFix) {
+            m_btnApplyFix->setEnabled(true);
+            m_btnApplyFix->show();
+            m_btnApplyFix->setDescription(QString("Apply fix for %1").arg(data["name"]));
+            m_statusLabel->setText(QString("Selected: %1").arg(data["name"]));
+        } else {
+            m_btnApplyFix->hide();
+            m_statusLabel->setText("No fix available for this game");
+        }
     }
 }
 
@@ -984,6 +969,38 @@ void MainWindow::cancelNameFetches() {
     }
     m_activeNameFetches.clear();
     m_pendingNameFetchIds.clear();
+}
+
+void MainWindow::switchMode(AppMode mode) {
+    if (m_currentMode == mode) return;
+    m_currentMode = mode;
+    updateModeUI();
+    
+    // Clear selection and re-run search/filter
+    m_resultsList->clearSelection();
+    onGameSelected(nullptr);
+    doSearch(); 
+}
+
+void MainWindow::updateModeUI() {
+    // Update Tab Styles
+    QString activeStyle = QString("background: %1; border: 1px solid %2; color: %3; border-radius: 6px; font-weight: bold;")
+                          .arg(Colors::GLASS_HOVER)
+                          .arg(Colors::ACCENT_BLUE)
+                          .arg(Colors::TEXT_PRIMARY);
+                          
+    QString inactiveStyle = QString("background: transparent; border: 1px solid transparent; color: %1; border-radius: 6px;")
+                            .arg(Colors::TEXT_SECONDARY);
+
+    if (m_currentMode == AppMode::LuaPatcher) {
+        m_tabLua->setStyleSheet(activeStyle);
+        m_tabFix->setStyleSheet(inactiveStyle);
+        m_stack->setCurrentIndex(1); // Show list
+    } else {
+        m_tabLua->setStyleSheet(inactiveStyle);
+        m_tabFix->setStyleSheet(activeStyle);
+        m_stack->setCurrentIndex(1); // Show list
+    }
 }
 
 void MainWindow::startBatchNameFetch() {

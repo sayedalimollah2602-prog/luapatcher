@@ -31,6 +31,11 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
+    enum class AppMode {
+        LuaPatcher,
+        FixManager
+    };
+
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow();
 
@@ -52,6 +57,8 @@ private slots:
     void doRestart();
     void doGenerate();
     void doApplyFix();
+    void switchMode(AppMode mode);
+    void updateModeUI();
     void processNextNameFetch();
 
 private:
@@ -69,6 +76,12 @@ private:
     LoadingSpinner* m_spinner;
     QListWidget* m_resultsList;
     QProgressBar* m_progress;
+    
+    // Header & Tabs
+    GlassButton* m_tabLua;
+    GlassButton* m_tabFix;
+    AppMode m_currentMode;
+
     GlassButton* m_btnPatch;
     GlassButton* m_btnGenerate;
     GlassButton* m_btnApplyFix;
