@@ -119,14 +119,12 @@ void MainWindow::initUI() {
     
     // Nav Buttons
     m_tabLua = new GlassButton("⬇", " Lua Patcher", "", Colors::ACCENT_BLUE);
-    m_tabLua->setFixedHeight(40);
-    m_tabLua->setStyleSheet("text-align: left; padding-left: 10px;");
+    m_tabLua->setFixedHeight(40); // Compact Mode
     connect(m_tabLua, &QPushButton::clicked, this, [this](){ switchMode(AppMode::LuaPatcher); });
     sidebarLayout->addWidget(m_tabLua);
     
     m_tabFix = new GlassButton("🔧", " Fix Manager", "", Colors::ACCENT_PURPLE); 
-    m_tabFix->setFixedHeight(40);
-    m_tabFix->setStyleSheet("text-align: left; padding-left: 10px;");
+    m_tabFix->setFixedHeight(40); // Compact Mode
     connect(m_tabFix, &QPushButton::clicked, this, [this](){ switchMode(AppMode::FixManager); });
     sidebarLayout->addWidget(m_tabFix);
     
@@ -150,17 +148,20 @@ void MainWindow::initUI() {
     
     // Actions (Contextual Buttons in Sidebar)
     m_btnPatch = new GlassButton("⬇", "Patch", "Install Patch", Colors::ACCENT_GREEN);
+    m_btnPatch->setFixedHeight(50); // Compact Mode
     m_btnPatch->setEnabled(false);
     connect(m_btnPatch, &QPushButton::clicked, this, &MainWindow::doPatch);
     sidebarLayout->addWidget(m_btnPatch);
     
     m_btnGenerate = new GlassButton("⚙", "Generate", "Fetch Data", Colors::ACCENT_BLUE);
+    m_btnGenerate->setFixedHeight(50);
     m_btnGenerate->setEnabled(false);
     m_btnGenerate->hide();
     connect(m_btnGenerate, &QPushButton::clicked, this, &MainWindow::doGenerate);
     sidebarLayout->addWidget(m_btnGenerate);
     
     m_btnApplyFix = new GlassButton("🔧", "Apply Fix", "Apply Fix Files", Colors::ACCENT_PURPLE);
+    m_btnApplyFix->setFixedHeight(50);
     m_btnApplyFix->setEnabled(false);
     m_btnApplyFix->hide();
     connect(m_btnApplyFix, &QPushButton::clicked, this, &MainWindow::doApplyFix);
@@ -169,6 +170,7 @@ void MainWindow::initUI() {
     sidebarLayout->addSpacing(10);
     
     m_btnRestart = new GlassButton("↻", "Restart Steam", "Apply Changes", Colors::ACCENT_PURPLE);
+    m_btnRestart->setFixedHeight(50); // Compact Mode
     connect(m_btnRestart, &QPushButton::clicked, this, &MainWindow::doRestart);
     sidebarLayout->addWidget(m_btnRestart);
     
@@ -1016,53 +1018,14 @@ void MainWindow::populateFixList() {
 }
 
 void MainWindow::updateModeUI() {
-    // Update Tab Styles with Left Border Indicator
-    
-    // Active: Semi-transparent background + Accent Color Text + Left Border
-    QString activeStyle = QString(
-        "background: rgba(59, 130, 246, 0.15);"  // Slight blue tint
-        "border: none;"
-        "border-left: 3px solid %1;"             // Accent color border
-        "color: %2;"
-        "text-align: left;"
-        "padding-left: 10px;"
-        "font-weight: bold;"
-    ).arg(Colors::ACCENT_BLUE).arg(Colors::ACCENT_BLUE);
-    
-    // Inactive: Transparent + Gray Text
-    QString inactiveStyle = QString(
-        "background: transparent;"
-        "border: none;"
-        "border-left: 3px solid transparent;"
-        "color: %1;"
-        "text-align: left;"
-        "padding-left: 10px;"
-    ).arg(Colors::TEXT_SECONDARY);
-
+    // Use the new GlassButton active state mechanism
     if (m_currentMode == AppMode::LuaPatcher) {
-        m_tabLua->setStyleSheet(activeStyle);
-        // Fix tab uses purple accent for active state if we want to differentiate, 
-        // but for now let's keep it consistent or use its own accent
-        
-        QString fixInactive = inactiveStyle; // Standard inactive
-        m_tabFix->setStyleSheet(fixInactive);
-        
+        m_tabLua->setActive(true);
+        m_tabFix->setActive(false);
         m_stack->setCurrentIndex(1); 
     } else {
-        m_tabLua->setStyleSheet(inactiveStyle);
-        
-        // Active Style for Fix Manager (Purple Accent)
-        QString fixActive = QString(
-            "background: rgba(168, 85, 247, 0.15);" // Slight purple tint
-            "border: none;"
-            "border-left: 3px solid %1;"
-            "color: %2;"
-            "text-align: left;"
-            "padding-left: 10px;"
-            "font-weight: bold;"
-        ).arg(Colors::ACCENT_PURPLE).arg(Colors::ACCENT_PURPLE);
-        
-        m_tabFix->setStyleSheet(fixActive);
+        m_tabLua->setActive(false);
+        m_tabFix->setActive(true);
         m_stack->setCurrentIndex(1); 
     }
 }

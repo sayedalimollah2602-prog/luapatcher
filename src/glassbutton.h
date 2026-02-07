@@ -14,6 +14,7 @@ public:
     
     void setDescription(const QString& desc);
     void setEnabled(bool enabled);
+    void setActive(bool active);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -23,6 +24,7 @@ private:
     QString m_titleText;
     QString m_descText;
     QString m_accentColor;
+    bool m_isActive = false;
     QGraphicsOpacityEffect* m_opacityEffect;
 };
 
