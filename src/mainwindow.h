@@ -60,6 +60,7 @@ private slots:
     void switchMode(AppMode mode);
     void updateModeUI();
     void processNextNameFetch();
+    void populateFixList();
 
 private:
     void initUI();
