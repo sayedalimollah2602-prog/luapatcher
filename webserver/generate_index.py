@@ -52,6 +52,9 @@ def save_games_index(app_map):
     if fix_files:
         print(f"Found {len(fix_files)} game fix files: {fix_files}")
     
+    # Track which games we've already added
+    added_ids = set()
+    
     if os.path.exists(games_dir):
         for filename in os.listdir(games_dir):
             if filename.endswith('.lua'):
@@ -63,6 +66,18 @@ def save_games_index(app_map):
                     "name": name,
                     "has_fix": app_id in fix_files
                 })
+                added_ids.add(app_id)
+    
+    # Add games that have a fix but no Lua script
+    for app_id in fix_files:
+        if app_id not in added_ids:
+            name = app_map.get(app_id, f"Unknown Game ({app_id})")
+            games_list.append({
+                "id": app_id,
+                "name": name,
+                "has_fix": True
+            })
+            added_ids.add(app_id)
     
     games_list.sort(key=lambda x: x['name'])
     
