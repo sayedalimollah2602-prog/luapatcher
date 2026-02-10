@@ -184,9 +184,12 @@ void MainWindow::initUI() {
     sidebarLayout->addSpacing(20);
 
     // Version & Creator
-    QLabel* infoLabel = new QLabel(QString("v%1\nby leVI & raxnmint").arg(Config::APP_VERSION));
+    QLabel* infoLabel = new QLabel(QString("v%1<br>by <a href=\"https://github.com/sayedalimollah2602-prog\" style=\"color: %2; text-decoration: none;\">leVI</a> & <a href=\"https://github.com/raxnmint\" style=\"color: %2; text-decoration: none;\">raxnmint</a>").arg(Config::APP_VERSION).arg(Colors::TEXT_SECONDARY));
     infoLabel->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold;").arg(Colors::TEXT_SECONDARY));
     infoLabel->setAlignment(Qt::AlignCenter);
+    infoLabel->setTextFormat(Qt::RichText);
+    infoLabel->setTextInteractionFlags(Qt::TextBrowserInteraction);
+    infoLabel->setOpenExternalLinks(true);
     sidebarLayout->addWidget(infoLabel);
     
     rootLayout->addWidget(sidebarWidget);
