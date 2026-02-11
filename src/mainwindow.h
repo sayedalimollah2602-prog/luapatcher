@@ -50,6 +50,7 @@ private slots:
     void doSearch();
     void onSearchFinished(QNetworkReply* reply);
     void onGameNameFetched(QNetworkReply* reply);
+    void onThumbnailDownloaded(QNetworkReply* reply);
     void onGameSelected(QListWidgetItem* item);
     void doPatch();
     void onPatchDone(QString path);
@@ -114,6 +115,9 @@ private:
     QList<QNetworkReply*> m_activeNameFetches;
     bool m_fetchingNames;
     int m_nameFetchSearchId;
+    
+    // Thumbnail cache
+    QMap<QString, QPixmap> m_thumbnailCache;
 };
 
 #endif // MAINWINDOW_H

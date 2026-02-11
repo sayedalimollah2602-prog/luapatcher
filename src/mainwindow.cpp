@@ -235,7 +235,7 @@ void MainWindow::initUI() {
     m_stack->addWidget(pageLoading);
     
     m_resultsList = new QListWidget();
-    m_resultsList->setIconSize(QSize(36, 36));
+    m_resultsList->setIconSize(QSize(120, 68)); // Larger size for game thumbnails
     m_resultsList->setWordWrap(true);
     m_resultsList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_resultsList->setTextElideMode(Qt::ElideNone);
@@ -527,6 +527,21 @@ void MainWindow::onSearchFinished(QNetworkReply* reply) {
             m_resultsList->addItem(listItem);
             itemMap.insert(id, listItem);
             resultsChanged = true;
+            
+            // Download thumbnail for this game
+            if (m_thumbnailCache.contains(id)) {
+                // Use cached thumbnail
+                listItem->setIcon(QIcon(m_thumbnailCache[id]));
+            } else {
+                // Download thumbnail from Steam CDN
+                QString thumbnailUrl = QString("https://cdn.akamai.steamstatic.com/steam/apps/%1/header.jpg").arg(id);
+                QNetworkRequest thumbRequest{QUrl(thumbnailUrl)};
+                QNetworkReply* thumbReply = m_networkManager->get(thumbRequest);
+                thumbReply->setProperty("appid", id);
+                connect(thumbReply, &QNetworkReply::finished, this, [this, thumbReply]() {
+                    onThumbnailDownloaded(thumbReply);
+                });
+            }
         }
     }
     
@@ -637,6 +652,21 @@ void MainWindow::displayResults(const QJsonArray& items) {
         }
         
         m_resultsList->addItem(listItem);
+        
+        // Download thumbnail for this game
+        if (m_thumbnailCache.contains(appid)) {
+            // Use cached thumbnail
+            listItem->setIcon(QIcon(m_thumbnailCache[appid]));
+        } else {
+            // Download thumbnail from Steam CDN
+            QString thumbnailUrl = QString("https://cdn.akamai.steamstatic.com/steam/apps/%1/header.jpg").arg(appid);
+            QNetworkRequest thumbRequest{QUrl(thumbnailUrl)};
+            QNetworkReply* thumbReply = m_networkManager->get(thumbRequest);
+            thumbReply->setProperty("appid", appid);
+            connect(thumbReply, &QNetworkReply::finished, this, [this, thumbReply]() {
+                onThumbnailDownloaded(thumbReply);
+            });
+        }
         
         // Track unknown games for batch fetch
         if (name.startsWith("Unknown Game") || name == "Unknown") {
@@ -1182,4 +1212,52 @@ void MainWindow::onGameNameFetched(QNetworkReply* reply) {
     
     // Process next in queue
     processNextNameFetch();
+}
+
+void MainWindow::onThumbnailDownloaded(QNetworkReply* reply) {
+    reply->deleteLater();
+    
+    if (reply->error() != QNetworkReply::NoError) {
+        // Silently fail for thumbnails, don't show errors
+        return;
+    }
+    
+    QString appId = reply->property("appid").toString();
+    if (appId.isEmpty()) return;
+    
+    QByteArray imageData = reply->readAll();
+    QPixmap pixmap;
+    
+    if (pixmap.loadFromData(imageData)) {
+        // Scale to fit icon size while maintaining aspect ratio
+        QPixmap scaledPixmap = pixmap.scaled(120, 68, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        
+        // Create rounded corners effect
+        QPixmap roundedPixmap(scaledPixmap.size());
+        roundedPixmap.fill(Qt::transparent);
+        
+        QPainter painter(&roundedPixmap);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        
+        QPainterPath path;
+        path.addRoundedRect(0, 0, scaledPixmap.width(), scaledPixmap.height(), 8, 8);
+        painter.setClipPath(path);
+        painter.drawPixmap(0, 0, scaledPixmap);
+        painter.end();
+        
+        // Cache the thumbnail
+        m_thumbnailCache[appId] = roundedPixmap;
+        
+        // Update the list item if it exists
+        for (int i = 0; i < m_resultsList->count(); ++i) {
+            QListWidgetItem* item = m_resultsList->item(i);
+            QMap<QString, QString> data = item->data(Qt::UserRole).value<QMap<QString, QString>>();
+            
+            if (data["appid"] == appId) {
+                item->setIcon(QIcon(roundedPixmap));
+                break;
+            }
+        }
+    }
 }

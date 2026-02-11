@@ -6,6 +6,7 @@
 struct GameInfo {
     QString id;
     QString name;
+    QString thumbnailUrl;
     bool hasFix = false;
     
     bool operator==(const GameInfo& other) const {
