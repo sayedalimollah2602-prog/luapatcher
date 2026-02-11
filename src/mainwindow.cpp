@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "glassbutton.h"
+#include "gamecard.h"
 #include "loadingspinner.h"
 #include "workers/indexdownloadworker.h"
 #include "workers/luadownloadworker.h"
@@ -25,6 +26,7 @@
 #include <QPixmap>
 #include <QPainterPath>
 #include <QFileDialog>
+#include <QScrollBar>
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -42,21 +44,17 @@ MainWindow::MainWindow(QWidget* parent)
     setWindowTitle("Steam Lua Patcher");
     setFixedSize(900, 600);
     
-    // Try to load icon
     QString iconPath = Paths::getResourcePath("logo.ico");
     if (QFile::exists(iconPath)) {
         setWindowIcon(QIcon(iconPath));
     }
     
-    // Initialize UI components first
     initUI();
     
-    // Setup debounce timer
     m_debounceTimer = new QTimer(this);
     m_debounceTimer->setSingleShot(true);
     connect(m_debounceTimer, &QTimer::timeout, this, &MainWindow::doSearch);
     
-    // Defer network initialization and sync to allow window to show first
     QTimer::singleShot(10, this, [this]() {
         m_networkManager = new QNetworkAccessManager(this);
         connect(m_networkManager, &QNetworkAccessManager::finished,
@@ -74,7 +72,6 @@ MainWindow::~MainWindow() {
 
 void MainWindow::paintEvent(QPaintEvent* event) {
     Q_UNUSED(event);
-    
     QPainter painter(this);
     QLinearGradient grad(0, 0, 0, height());
     grad.setColorAt(0, Colors::toQColor(Colors::BG_GRADIENT_START));
@@ -86,88 +83,69 @@ void MainWindow::initUI() {
     QWidget* central = new QWidget(this);
     setCentralWidget(central);
     
-    // Root Layout (Horizontal: Sidebar | Content)
     QHBoxLayout* rootLayout = new QHBoxLayout(central);
     rootLayout->setContentsMargins(0, 0, 0, 0);
     rootLayout->setSpacing(0);
     
-    // ---------------------------------------------------------
-    // 1. Sidebar (Left)
-    // ---------------------------------------------------------
+    // ---- Sidebar ----
     QWidget* sidebarWidget = new QWidget();
     sidebarWidget->setFixedWidth(200);
-    // Use a semi-transparent background with a blur effect if possible, 
-    // or just the same glass background color as buttons but slightly different
-    QString sidebarStyle = QString(
-        "background-color: %1;" 
-        "border-right: 1px solid %2;"
-    ).arg(Colors::GLASS_BG).arg(Colors::GLASS_BORDER); // Use GLASS_BG for consistent look
-    
-    sidebarWidget->setStyleSheet(sidebarStyle);
+    sidebarWidget->setStyleSheet(QString(
+        "background-color: %1; border-right: 1px solid %2;"
+    ).arg(Colors::GLASS_BG).arg(Colors::GLASS_BORDER));
     
     QVBoxLayout* sidebarLayout = new QVBoxLayout(sidebarWidget);
     sidebarLayout->setContentsMargins(15, 25, 15, 25);
     sidebarLayout->setSpacing(15);
     
-    // Header
     QHBoxLayout* headerLayout = new QHBoxLayout();
-    QLabel* icon = new QLabel("⚡");
+    QLabel* icon = new QLabel(QString::fromUtf8("⚡"));
     icon->setStyleSheet(QString("font-size: 20px; color: %1; font-weight: bold; background: transparent; border: none;").arg(Colors::ACCENT_BLUE));
-    
     QLabel* title = new QLabel("Lua Patcher");
     title->setStyleSheet("font-size: 16px; font-weight: 700; color: #E2E8F0; background: transparent; border: none;");
-    
     headerLayout->addWidget(icon);
     headerLayout->addWidget(title);
     headerLayout->addStretch();
     sidebarLayout->addLayout(headerLayout);
-    
     sidebarLayout->addSpacing(20);
     
-    // Nav Buttons
-    m_tabLua = new GlassButton("⬇", " Lua Patcher", "", Colors::ACCENT_BLUE);
-    m_tabLua->setFixedHeight(40); // Compact Mode
+    m_tabLua = new GlassButton(QString::fromUtf8("⬇"), " Lua Patcher", "", Colors::ACCENT_BLUE);
+    m_tabLua->setFixedHeight(40);
     connect(m_tabLua, &QPushButton::clicked, this, [this](){ switchMode(AppMode::LuaPatcher); });
     sidebarLayout->addWidget(m_tabLua);
     
-    m_tabFix = new GlassButton("🔧", " Fix Manager", "", Colors::ACCENT_PURPLE); 
-    m_tabFix->setFixedHeight(40); // Compact Mode
+    m_tabFix = new GlassButton(QString::fromUtf8("🔧"), " Fix Manager", "", Colors::ACCENT_PURPLE);
+    m_tabFix->setFixedHeight(40);
     connect(m_tabFix, &QPushButton::clicked, this, [this](){ switchMode(AppMode::FixManager); });
     sidebarLayout->addWidget(m_tabFix);
     
     sidebarLayout->addSpacing(10);
-    
-    // Separator
     QFrame* line = new QFrame();
     line->setFrameShape(QFrame::HLine);
     line->setStyleSheet("background: rgba(255, 255, 255, 0.1);");
     sidebarLayout->addWidget(line);
-    
     sidebarLayout->addSpacing(10);
     
-    // Status (Moved to sidebar)
     m_statusLabel = new QLabel("Initializing...");
     m_statusLabel->setStyleSheet(QString("color: %1; font-size: 11px;").arg(Colors::TEXT_SECONDARY));
     m_statusLabel->setWordWrap(true);
     sidebarLayout->addWidget(m_statusLabel);
-    
     sidebarLayout->addStretch();
     
-    // Actions (Contextual Buttons in Sidebar)
-    m_btnPatch = new GlassButton("⬇", "Patch", "Install Patch", Colors::ACCENT_GREEN);
-    m_btnPatch->setFixedHeight(50); // Compact Mode
+    m_btnPatch = new GlassButton(QString::fromUtf8("⬇"), "Patch", "Install Patch", Colors::ACCENT_GREEN);
+    m_btnPatch->setFixedHeight(50);
     m_btnPatch->setEnabled(false);
     connect(m_btnPatch, &QPushButton::clicked, this, &MainWindow::doPatch);
     sidebarLayout->addWidget(m_btnPatch);
     
-    m_btnGenerate = new GlassButton("⚙", "Generate", "Fetch Data", Colors::ACCENT_BLUE);
+    m_btnGenerate = new GlassButton(QString::fromUtf8("⚙"), "Generate", "Fetch Data", Colors::ACCENT_BLUE);
     m_btnGenerate->setFixedHeight(50);
     m_btnGenerate->setEnabled(false);
     m_btnGenerate->hide();
     connect(m_btnGenerate, &QPushButton::clicked, this, &MainWindow::doGenerate);
     sidebarLayout->addWidget(m_btnGenerate);
     
-    m_btnApplyFix = new GlassButton("🔧", "Apply Fix", "Apply Fix Files", Colors::ACCENT_PURPLE);
+    m_btnApplyFix = new GlassButton(QString::fromUtf8("🔧"), "Apply Fix", "Apply Fix Files", Colors::ACCENT_PURPLE);
     m_btnApplyFix->setFixedHeight(50);
     m_btnApplyFix->setEnabled(false);
     m_btnApplyFix->hide();
@@ -175,15 +153,12 @@ void MainWindow::initUI() {
     sidebarLayout->addWidget(m_btnApplyFix);
     
     sidebarLayout->addSpacing(10);
-    
-    m_btnRestart = new GlassButton("↻", "Restart Steam", "Apply Changes", Colors::ACCENT_PURPLE);
-    m_btnRestart->setFixedHeight(50); // Compact Mode
+    m_btnRestart = new GlassButton(QString::fromUtf8("↻"), "Restart Steam", "Apply Changes", Colors::ACCENT_PURPLE);
+    m_btnRestart->setFixedHeight(50);
     connect(m_btnRestart, &QPushButton::clicked, this, &MainWindow::doRestart);
     sidebarLayout->addWidget(m_btnRestart);
-    
     sidebarLayout->addSpacing(20);
-
-    // Version & Creator
+    
     QLabel* infoLabel = new QLabel(QString("v%1<br>by <a href=\"https://github.com/sayedalimollah2602-prog\" style=\"color: %2; text-decoration: none;\">leVI</a> & <a href=\"https://github.com/raxnmint\" style=\"color: %2; text-decoration: none;\">raxnmint</a>").arg(Config::APP_VERSION).arg(Colors::TEXT_SECONDARY));
     infoLabel->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold;").arg(Colors::TEXT_SECONDARY));
     infoLabel->setAlignment(Qt::AlignCenter);
@@ -191,21 +166,17 @@ void MainWindow::initUI() {
     infoLabel->setTextInteractionFlags(Qt::TextBrowserInteraction);
     infoLabel->setOpenExternalLinks(true);
     sidebarLayout->addWidget(infoLabel);
-    
     rootLayout->addWidget(sidebarWidget);
 
-    // ---------------------------------------------------------
-    // 2. Content Area (Right)
-    // ---------------------------------------------------------
+    // ---- Content Area ----
     QWidget* contentWidget = new QWidget();
     QVBoxLayout* mainLayout = new QVBoxLayout(contentWidget);
-    mainLayout->setContentsMargins(30, 30, 30, 30);
-    mainLayout->setSpacing(20);
+    mainLayout->setContentsMargins(20, 20, 20, 20);
+    mainLayout->setSpacing(15);
     
-    // Search Bar
+    // Search bar
     QHBoxLayout* searchLayout = new QHBoxLayout();
     searchLayout->setSpacing(8);
-    
     m_searchInput = new QLineEdit();
     m_searchInput->setPlaceholderText("Find a game...");
     connect(m_searchInput, &QLineEdit::textChanged, this, &MainWindow::onSearchChanged);
@@ -214,17 +185,22 @@ void MainWindow::initUI() {
     m_searchInput->setGraphicsEffect(shadow);
     searchLayout->addWidget(m_searchInput);
     
-    QPushButton* refreshBtn = new QPushButton("↻");
+    QPushButton* refreshBtn = new QPushButton(QString::fromUtf8("↻"));
     refreshBtn->setFixedSize(36, 36);
     refreshBtn->setCursor(Qt::PointingHandCursor);
-    refreshBtn->setStyleSheet(QString("QPushButton { background: %1; border: 1px solid %2; border-radius: 8px; font-size: 16px; font-weight: bold; color: %3; } QPushButton:hover { background: %4; border-color: %5; } QPushButton:pressed { background: %6; }").arg(Colors::GLASS_BG).arg(Colors::GLASS_BORDER).arg(Colors::TEXT_PRIMARY).arg(Colors::GLASS_HOVER).arg(Colors::ACCENT_BLUE).arg(Colors::GLASS_BG));
+    refreshBtn->setStyleSheet(QString(
+        "QPushButton { background: %1; border: 1px solid %2; border-radius: 8px; font-size: 16px; font-weight: bold; color: %3; }"
+        "QPushButton:hover { background: %4; border-color: %5; }"
+        "QPushButton:pressed { background: %6; }"
+    ).arg(Colors::GLASS_BG).arg(Colors::GLASS_BORDER).arg(Colors::TEXT_PRIMARY)
+     .arg(Colors::GLASS_HOVER).arg(Colors::ACCENT_BLUE).arg(Colors::GLASS_BG));
     connect(refreshBtn, &QPushButton::clicked, this, [this]() {
         if (m_searchInput->text().trimmed().isEmpty()) startSync(); else doSearch();
     });
     searchLayout->addWidget(refreshBtn);
     mainLayout->addLayout(searchLayout);
     
-    // Stack for Loading / List
+    // Stacked widget: page 0 = loading, page 1 = grid
     m_stack = new QStackedWidget();
     
     QWidget* pageLoading = new QWidget();
@@ -232,135 +208,135 @@ void MainWindow::initUI() {
     layLoading->setAlignment(Qt::AlignCenter);
     m_spinner = new LoadingSpinner();
     layLoading->addWidget(m_spinner);
-    m_stack->addWidget(pageLoading);
+    m_stack->addWidget(pageLoading); // index 0
     
-    m_resultsList = new QListWidget();
-    m_resultsList->setIconSize(QSize(120, 68)); // Larger size for game thumbnails
-    m_resultsList->setWordWrap(true);
-    m_resultsList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    m_resultsList->setTextElideMode(Qt::ElideNone);
-    connect(m_resultsList, &QListWidget::itemPressed, this, &MainWindow::onGameSelected);
-    connect(m_resultsList->verticalScrollBar(), &QScrollBar::valueChanged, this, &MainWindow::loadVisibleThumbnails);
-    m_stack->addWidget(m_resultsList);
+    // ---- GRID PAGE (replaces QListWidget) ----
+    m_scrollArea = new QScrollArea();
+    m_scrollArea->setWidgetResizable(true);
+    m_scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_scrollArea->setFrameShape(QFrame::NoFrame);
+    m_scrollArea->setStyleSheet(
+        "QScrollArea { background: transparent; border: none; }"
+        "QScrollBar:vertical { background: rgba(0,0,0,40); width: 8px; border-radius: 4px; }"
+        "QScrollBar::handle:vertical { background: rgba(255,255,255,60); border-radius: 4px; min-height: 30px; }"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
+    );
+    
+    m_gridContainer = new QWidget();
+    m_gridContainer->setStyleSheet("background: transparent;");
+    m_gridLayout = new QGridLayout(m_gridContainer);
+    m_gridLayout->setContentsMargins(0, 0, 0, 0);
+    m_gridLayout->setSpacing(8);
+    
+    m_scrollArea->setWidget(m_gridContainer);
+    connect(m_scrollArea->verticalScrollBar(), &QScrollBar::valueChanged,
+            this, &MainWindow::loadVisibleThumbnails);
+    
+    m_stack->addWidget(m_scrollArea); // index 1
     mainLayout->addWidget(m_stack);
     
     m_progress = new QProgressBar();
     m_progress->setFixedHeight(4);
     m_progress->setTextVisible(false);
-    m_progress->setStyleSheet(QString("QProgressBar { background: %1; border-radius: 2px; } QProgressBar::chunk { background: %2; border-radius: 2px; }").arg(Colors::GLASS_BG).arg(Colors::ACCENT_GREEN));
+    m_progress->setStyleSheet(QString(
+        "QProgressBar { background: %1; border-radius: 2px; }"
+        "QProgressBar::chunk { background: %2; border-radius: 2px; }"
+    ).arg(Colors::GLASS_BG).arg(Colors::ACCENT_GREEN));
     m_progress->hide();
     mainLayout->addWidget(m_progress);
     
     rootLayout->addWidget(contentWidget);
-    
     m_terminalDialog = new TerminalDialog(this);
-    
-    // Trigger initial UI state
     updateModeUI();
 }
 
+// ---- Helper: clear all game cards from grid ----
+void MainWindow::clearGameCards() {
+    m_selectedCard = nullptr;
+    for (GameCard* card : m_gameCards) {
+        m_gridLayout->removeWidget(card);
+        card->deleteLater();
+    }
+    m_gameCards.clear();
+}
+
+// ---- Sync ----
 void MainWindow::startSync() {
-    m_stack->setCurrentIndex(0); // Loading
+    m_stack->setCurrentIndex(0);
     m_spinner->start();
-    
     m_syncWorker = new IndexDownloadWorker(this);
-    connect(m_syncWorker, &IndexDownloadWorker::finished,
-            this, &MainWindow::onSyncDone);
-    connect(m_syncWorker, &IndexDownloadWorker::progress,
-            m_statusLabel, &QLabel::setText);
-    connect(m_syncWorker, &IndexDownloadWorker::error,
-            this, &MainWindow::onSyncError);
+    connect(m_syncWorker, &IndexDownloadWorker::finished, this, &MainWindow::onSyncDone);
+    connect(m_syncWorker, &IndexDownloadWorker::progress, m_statusLabel, &QLabel::setText);
+    connect(m_syncWorker, &IndexDownloadWorker::error, this, &MainWindow::onSyncError);
     m_syncWorker->start();
 }
 
 void MainWindow::onSyncDone(QList<GameInfo> games) {
     m_supportedGames = games;
     m_spinner->stop();
-    m_stack->setCurrentIndex(1); // List
+    m_stack->setCurrentIndex(1);
     m_statusLabel->setText("Ready");
     m_searchInput->setFocus();
-    
-    // Trigger initial empty search to show list if needed, or just clear
-    if (!m_searchInput->text().isEmpty()) {
-        doSearch();
-    }
+    if (!m_searchInput->text().isEmpty()) doSearch();
 }
-
 
 void MainWindow::onSyncError(QString error) {
     m_spinner->stop();
     m_stack->setCurrentIndex(1);
     m_statusLabel->setText("Offline Mode");
     QMessageBox::warning(this, "Connection Error",
-                        QString("Could not sync library:\n%1").arg(error));
+                         QString("Could not sync library:\n%1").arg(error));
 }
 
+// ---- Search ----
 void MainWindow::onSearchChanged(const QString& text) {
     m_debounceTimer->stop();
     if (!text.trimmed().isEmpty()) {
         m_debounceTimer->start(400);
     } else {
-        m_resultsList->clear();
+        clearGameCards();
     }
 }
 
 void MainWindow::doSearch() {
     QString query = m_searchInput->text().trimmed();
     if (query.isEmpty()) return;
-    
-    // Safety check if triggered before init
     if (!m_networkManager) return;
     
-    // Cancel any in-progress name fetches
     cancelNameFetches();
-    
     m_currentSearchId++;
     m_statusLabel->setText("Searching...");
     
-    // 1. Local Search (Instant)
+    // Local search
     QJsonArray localResults;
     for (const auto& game : m_supportedGames) {
-        // FILTER: If in Fix Manager mode, only show games with hasFix = true
-        if (m_currentMode == AppMode::FixManager && !game.hasFix) {
-            continue;
-        }
-
+        if (m_currentMode == AppMode::FixManager && !game.hasFix) continue;
         if (game.name.contains(query, Qt::CaseInsensitive) || game.id == query) {
             QJsonObject item;
             item["id"] = game.id;
             item["name"] = game.name;
-            item["supported_local"] = true; // Marker for local result
+            item["supported_local"] = true;
             localResults.append(item);
         }
     }
-    
-    // Display local results immediately
     displayResults(localResults);
     
-    // In Fix Manager mode, we ONLY search local supported games (because we can't apply fix to unsupported games)
     if (m_currentMode == AppMode::FixManager) {
-        if (m_resultsList->count() == 0) {
-            m_statusLabel->setText("No fixes found for this game");
-        } else {
-             m_statusLabel->setText(QString("Found %1 games with fixes").arg(m_resultsList->count()));
-        }
+        m_statusLabel->setText(m_gameCards.isEmpty()
+            ? "No fixes found for this game"
+            : QString("Found %1 games with fixes").arg(m_gameCards.count()));
         m_stack->setCurrentIndex(1);
         m_spinner->stop();
-        return; 
+        return;
     }
     
-    // Show spinner if we need remote data
     m_spinner->start();
-    if (m_resultsList->count() == 0) {
-        m_stack->setCurrentIndex(0); // Show spinner page if no local results
-    }
+    if (m_gameCards.isEmpty()) m_stack->setCurrentIndex(0);
     
     bool isNumeric;
     query.toInt(&isNumeric);
     
     if (isNumeric) {
-        // --- Numeric App ID Search ---
-        // 1. Steam Store AppDetails (Primary)
         QUrl urlStore(QString("https://store.steampowered.com/api/appdetails?appids=%1").arg(query));
         QNetworkRequest reqStore(urlStore);
         QNetworkReply* repStore = m_networkManager->get(reqStore);
@@ -368,18 +344,13 @@ void MainWindow::doSearch() {
         repStore->setProperty("type", "steam_details");
         repStore->setProperty("query_id", query);
     } else {
-        // --- Text Name Search ---
-        if (m_activeReply) {
-            m_activeReply->abort();
-        }
-        
+        if (m_activeReply) m_activeReply->abort();
         QUrl url("https://store.steampowered.com/api/storesearch");
         QUrlQuery urlQuery;
         urlQuery.addQueryItem("term", query);
         urlQuery.addQueryItem("l", "english");
         urlQuery.addQueryItem("cc", "US");
         url.setQuery(urlQuery);
-        
         QNetworkRequest request(url);
         m_activeReply = m_networkManager->get(request);
         m_activeReply->setProperty("sid", m_currentSearchId);
@@ -387,20 +358,17 @@ void MainWindow::doSearch() {
     }
 }
 
-
 void MainWindow::onSearchFinished(QNetworkReply* reply) {
     reply->deleteLater();
     if (reply == m_activeReply) m_activeReply = nullptr;
-    
     if (reply->error() == QNetworkReply::OperationCanceledError) return;
+    
     int sid = reply->property("sid").toInt();
     if (sid != m_currentSearchId) return;
     
     if (reply->error() != QNetworkReply::NoError) {
-        // Only show error if we have absolutely nothing and it's a primary search
-        if (m_resultsList->count() == 0 && reply->property("type").toString() == "store_search") {
+        if (m_gameCards.isEmpty() && reply->property("type").toString() == "store_search")
             m_statusLabel->setText("Search failed");
-        }
         return;
     }
     
@@ -412,39 +380,33 @@ void MainWindow::onSearchFinished(QNetworkReply* reply) {
     QList<QJsonObject> newItems;
     
     if (type == "store_search") {
-        // Standard Store Search
         QJsonArray remoteItems = obj["items"].toArray();
-        for (const QJsonValue& val : remoteItems) {
+        for (const QJsonValue& val : remoteItems)
             newItems.append(val.toObject());
-        }
-    } 
+    }
     else if (type == "steam_details") {
-        // API returns { "appid": { "success": true, "data": { ... } } }
         QString qId = reply->property("query_id").toString();
-        bool steamSuccess = false;
+        bool ok = false;
         if (obj.contains(qId)) {
             QJsonObject root = obj[qId].toObject();
             if (root["success"].toBool() && root.contains("data")) {
-                QJsonObject dataObj = root["data"].toObject();
+                QJsonObject d = root["data"].toObject();
                 QJsonObject item;
-                item["id"] = dataObj["steam_appid"].toInt();
-                item["name"] = dataObj["name"].toString();
+                item["id"] = d["steam_appid"].toInt();
+                item["name"] = d["name"].toString();
                 newItems.append(item);
-                steamSuccess = true;
+                ok = true;
             }
         }
-        
-        if (!steamSuccess) {
+        if (!ok) {
             QUrl urlSpy(QString("https://steamspy.com/api.php?request=appdetails&appid=%1").arg(qId));
-            QNetworkRequest reqSpy(urlSpy);
-            QNetworkReply* repSpy = m_networkManager->get(reqSpy);
+            QNetworkReply* repSpy = m_networkManager->get(QNetworkRequest(urlSpy));
             repSpy->setProperty("sid", sid);
             repSpy->setProperty("type", "steamspy_details");
-            return; // Don't finalize yet, let SteamSpy finish
+            return;
         }
     }
     else if (type == "steamspy_details") {
-        // API returns { "appid": 123, "name": "Game Name", ... }
         if (obj.contains("name") && !obj["name"].toString().isEmpty()) {
             QJsonObject item;
             item["id"] = obj["appid"].isDouble() ? obj["appid"].toInt() : obj["appid"].toString().toInt();
@@ -453,231 +415,137 @@ void MainWindow::onSearchFinished(QNetworkReply* reply) {
         }
     }
     
-    // Search is finished (either standard or the final fallback)
     m_spinner->stop();
     m_stack->setCurrentIndex(1);
     
-    // Merge logic
-    QMap<QString, QListWidgetItem*> itemMap;
-    for (int i = 0; i < m_resultsList->count(); ++i) {
-        QListWidgetItem* existingItem = m_resultsList->item(i);
-        QMap<QString, QString> itemData = existingItem->data(Qt::UserRole).value<QMap<QString, QString>>();
-        itemMap.insert(itemData["appid"], existingItem);
-    }
+    // Build map of existing cards for merge
+    QMap<QString, GameCard*> cardMap;
+    for (GameCard* c : m_gameCards) cardMap.insert(c->appId(), c);
     
-    bool resultsChanged = false;
+    bool changed = false;
     
     for (const auto& item : newItems) {
         QString id = QString::number(item["id"].toInt());
         QString name = item["name"].toString("Unknown");
         
-        // Re-check support status
         bool supported = false;
         bool hasFix = false;
-        for(const auto& g : m_supportedGames) {
-            if(g.id == id) {
-                supported = true;
-                hasFix = g.hasFix;
-                break;
-            }
+        for (const auto& g : m_supportedGames) {
+            if (g.id == id) { supported = true; hasFix = g.hasFix; break; }
         }
-
-        if (itemMap.contains(id)) {
-            // Update existing if it's "Unknown"
-            QListWidgetItem* existingItem = itemMap[id];
-            QMap<QString, QString> existingData = existingItem->data(Qt::UserRole).value<QMap<QString, QString>>();
-            
-            if (existingData["name"].contains("Unknown Game", Qt::CaseInsensitive) || existingData["name"] == id) {
-                QString statusText = supported ? "Supported" : "Not Indexed • Supports Auto Generate";
-                existingItem->setText(QString("%1\n%2 • ID: %3").arg(name).arg(statusText).arg(id));
-                
-                existingData["name"] = name;
-                existingData["supported"] = supported ? "true" : "false";
-                existingData["hasFix"] = hasFix ? "true" : "false";
-                existingItem->setData(Qt::UserRole, QVariant::fromValue(existingData));
-                
-                existingItem->setIcon(createStatusIcon(supported));
-                if (supported) {
-                    existingItem->setForeground(Colors::toQColor(Colors::ACCENT_GREEN));
-                } else {
-                    existingItem->setForeground(Colors::toQColor(Colors::TEXT_SECONDARY));
-                }
-                resultsChanged = true;
+        
+        if (cardMap.contains(id)) {
+            GameCard* existing = cardMap[id];
+            QMap<QString, QString> ed = existing->gameData();
+            if (ed["name"].contains("Unknown", Qt::CaseInsensitive) || ed["name"] == id) {
+                ed["name"] = name;
+                ed["supported"] = supported ? "true" : "false";
+                ed["hasFix"] = hasFix ? "true" : "false";
+                existing->setGameData(ed);
+                changed = true;
             }
         } else {
-            // Add new item
-            QString statusText = supported ? "Supported" : "Not Indexed • Supports Auto Generate";
-            QString displayText = QString("%1\n%2 • ID: %3").arg(name).arg(statusText).arg(id);
+            QMap<QString, QString> cd;
+            cd["name"] = name;
+            cd["appid"] = id;
+            cd["supported"] = supported ? "true" : "false";
+            cd["hasFix"] = hasFix ? "true" : "false";
             
-            QListWidgetItem* listItem = new QListWidgetItem(displayText);
+            GameCard* card = new GameCard(m_gridContainer);
+            card->setGameData(cd);
+            connect(card, &GameCard::clicked, this, &MainWindow::onCardClicked);
             
-            QMap<QString, QString> data;
-            data["name"] = name;
-            data["appid"] = id;
-            data["supported"] = supported ? "true" : "false";
-            data["hasFix"] = hasFix ? "true" : "false";
-            listItem->setData(Qt::UserRole, QVariant::fromValue(data));
+            int idx = m_gameCards.count();
+            m_gridLayout->addWidget(card, idx / 4, idx % 4);
+            m_gameCards.append(card);
+            cardMap.insert(id, card);
+            changed = true;
             
-            listItem->setIcon(createStatusIcon(supported));
-            if (supported) {
-                listItem->setForeground(Colors::toQColor(Colors::ACCENT_GREEN));
-            } else {
-                listItem->setForeground(Colors::toQColor(Colors::TEXT_SECONDARY));
-            }
-            
-            m_resultsList->addItem(listItem);
-            itemMap.insert(id, listItem);
-            resultsChanged = true;
-            
-            // Download thumbnail for this game
             if (m_thumbnailCache.contains(id)) {
-                // Use cached thumbnail
-                listItem->setIcon(QIcon(m_thumbnailCache[id]));
-            } else {
-                // Download thumbnail from Steam CDN
-                QString thumbnailUrl = QString("https://cdn.akamai.steamstatic.com/steam/apps/%1/header.jpg").arg(id);
-                QNetworkRequest thumbRequest{QUrl(thumbnailUrl)};
-                QNetworkReply* thumbReply = m_networkManager->get(thumbRequest);
-                thumbReply->setProperty("appid", id);
-                connect(thumbReply, &QNetworkReply::finished, this, [this, thumbReply]() {
-                    onThumbnailDownloaded(thumbReply);
+                card->setThumbnail(m_thumbnailCache[id]);
+            } else if (!m_activeThumbnailDownloads.contains(id)) {
+                m_activeThumbnailDownloads.insert(id);
+                QString thumbUrl = QString("https://cdn.akamai.steamstatic.com/steam/apps/%1/header.jpg").arg(id);
+                QNetworkReply* tr = m_networkManager->get(QNetworkRequest{QUrl(thumbUrl)});
+                tr->setProperty("appid", id);
+                connect(tr, &QNetworkReply::finished, this, [this, tr]() {
+                    onThumbnailDownloaded(tr);
                 });
             }
         }
     }
     
-    if (resultsChanged || m_resultsList->count() > 0) {
-        m_statusLabel->setText(QString("Found %1 results").arg(m_resultsList->count()));
-    } else {
-         m_statusLabel->setText("No results found");
-    }
+    m_statusLabel->setText(m_gameCards.isEmpty()
+        ? "No results found"
+        : QString("Found %1 results").arg(m_gameCards.count()));
 }
 
-
-QIcon MainWindow::createStatusIcon(bool supported) {
-    int size = 64;
-    QPixmap pixmap(size, size);
-    pixmap.fill(Qt::transparent);
-    
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing);
-    
-    // Color & Shape
-    QColor color = supported ? Colors::toQColor(Colors::ACCENT_GREEN) 
-                             : Colors::toQColor(Colors::ACCENT_BLUE);
-    QColor bgColor = color;
-    bgColor.setAlpha(40);
-    
-    // Draw Circle Background
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(QBrush(bgColor));
-    painter.drawEllipse(4, 4, size-8, size-8);
-    
-    // Draw Border
-    painter.setPen(QPen(color, 3));
-    painter.setBrush(Qt::NoBrush);
-    painter.drawEllipse(4, 4, size-8, size-8);
-    
-    // Draw Symbol
-    QFont font("Segoe UI Symbol", 28, QFont::Bold);
-    painter.setFont(font);
-    painter.setPen(color);
-    QString symbol = supported ? "✓" : "⚙";
-    painter.drawText(pixmap.rect(), Qt::AlignCenter, symbol);
-    
-    return QIcon(pixmap);
-}
-
+// ---- Display results as grid cards ----
 void MainWindow::displayResults(const QJsonArray& items) {
-    m_resultsList->clear();
+    clearGameCards();
     m_selectedGame.clear();
     m_btnPatch->setEnabled(false);
     m_pendingNameFetchIds.clear();
     cancelNameFetches();
     
-    if (items.isEmpty()) {
-        // m_statusLabel->setText("No results found"); // Don't show this yet, might be waiting for remote
-        return; 
-    }
+    if (items.isEmpty()) return;
     
+    int idx = 0;
     for (const QJsonValue& val : items) {
         QJsonObject item = val.toObject();
         QString name = item["name"].toString("Unknown");
-        QString appid = item.contains("id") ? (item["id"].isString() ? item["id"].toString() : QString::number(item["id"].toInt())) : "0";
-        bool supported = false;
+        QString appid = item.contains("id")
+            ? (item["id"].isString() ? item["id"].toString() : QString::number(item["id"].toInt()))
+            : "0";
         
-        // If it came from local search, we know it's supported
+        bool supported = false;
         bool hasFix = false;
         if (item.contains("supported_local")) {
             supported = true;
-            // Check if this game has a fix
-            for(const auto& g : m_supportedGames) {
-               if(g.id == appid) {
-                   hasFix = g.hasFix;
-                   break;
-               }
-           }
+            for (const auto& g : m_supportedGames) {
+                if (g.id == appid) { hasFix = g.hasFix; break; }
+            }
         } else {
-            // Double check
-             for(const auto& g : m_supportedGames) {
-               if(g.id == appid) {
-                   supported = true;
-                   hasFix = g.hasFix;
-                   break;
-               }
-           }
-        }
-
-        
-        QString statusText = supported ? "Supported" : "Not Indexed • Supports Auto Generate";
-        QString displayText = QString("%1\n%2 • ID: %3")
-                             .arg(name).arg(statusText).arg(appid);
-        
-        QListWidgetItem* listItem = new QListWidgetItem(displayText);
-        
-        // Store data
-        QMap<QString, QString> data;
-        data["name"] = name;
-        data["appid"] = appid;
-        data["supported"] = supported ? "true" : "false";
-        data["hasFix"] = hasFix ? "true" : "false";
-        listItem->setData(Qt::UserRole, QVariant::fromValue(data));
-        
-        listItem->setIcon(createStatusIcon(supported));
-        
-        // Custom styling
-        if (supported) {
-            listItem->setForeground(Colors::toQColor(Colors::ACCENT_GREEN));
-        } else {
-            listItem->setForeground(Colors::toQColor(Colors::TEXT_SECONDARY));
+            for (const auto& g : m_supportedGames) {
+                if (g.id == appid) { supported = true; hasFix = g.hasFix; break; }
+            }
         }
         
-        m_resultsList->addItem(listItem);
+        QMap<QString, QString> cd;
+        cd["name"] = name;
+        cd["appid"] = appid;
+        cd["supported"] = supported ? "true" : "false";
+        cd["hasFix"] = hasFix ? "true" : "false";
         
-        // Lazy load: Only set if cached, otherwise wait for scroll/visible check
+        GameCard* card = new GameCard(m_gridContainer);
+        card->setGameData(cd);
+        connect(card, &GameCard::clicked, this, &MainWindow::onCardClicked);
+        
+        m_gridLayout->addWidget(card, idx / 4, idx % 4);
+        m_gameCards.append(card);
+        
         if (m_thumbnailCache.contains(appid)) {
-            listItem->setIcon(QIcon(m_thumbnailCache[appid]));
+            card->setThumbnail(m_thumbnailCache[appid]);
         }
         
-        // Track unknown games for batch fetch
         if (name.startsWith("Unknown Game") || name == "Unknown") {
             m_pendingNameFetchIds.append(appid);
         }
+        idx++;
     }
     
     m_statusLabel->setText(QString("Found %1 results").arg(items.size()));
+    QTimer::singleShot(50, this, &MainWindow::loadVisibleThumbnails);
     
-    // Trigger lazy load for currently visible items
-    QTimer::singleShot(10, this, &MainWindow::loadVisibleThumbnails);
-    
-    // Start fetching names for unknown games
-    if (!m_pendingNameFetchIds.isEmpty()) {
-        startBatchNameFetch();
-    }
+    if (!m_pendingNameFetchIds.isEmpty()) startBatchNameFetch();
 }
 
-void MainWindow::onGameSelected(QListWidgetItem* item) {
-    if (!item) {
+// ---- Card clicked (replaces onGameSelected) ----
+void MainWindow::onCardClicked(GameCard* card) {
+    if (m_selectedCard) m_selectedCard->setSelected(false);
+    
+    if (!card) {
+        m_selectedCard = nullptr;
         m_selectedGame.clear();
         m_btnPatch->setEnabled(false);
         m_btnGenerate->hide();
@@ -685,43 +553,34 @@ void MainWindow::onGameSelected(QListWidgetItem* item) {
         m_statusLabel->setText("Ready");
         return;
     }
-
-    QMap<QString, QString> data = item->data(Qt::UserRole)
-                                      .value<QMap<QString, QString>>();
     
+    m_selectedCard = card;
+    card->setSelected(true);
+    
+    QMap<QString, QString> data = card->gameData();
     m_selectedGame = data;
     bool hasFix = (data["hasFix"] == "true");
     bool isSupported = (data["supported"] == "true");
     
     if (m_currentMode == AppMode::LuaPatcher) {
-        // Patcher Mode: Show Patch/Generate, Hide Fix
         m_btnApplyFix->hide();
-        m_btnPatch->show(); // Ensure visible in case it was hidden
-        
+        m_btnPatch->show();
         if (isSupported) {
             m_btnPatch->setEnabled(true);
             m_btnPatch->setDescription(QString("Install patch for %1").arg(data["name"]));
             m_statusLabel->setText(QString("Selected: %1").arg(data["name"]));
-            
             m_btnGenerate->hide();
         } else {
-            m_selectedGame["supported"] = "false"; 
-            
             m_btnPatch->setEnabled(false);
             m_btnPatch->setDescription("Patch unavailable for this game");
-            
             m_btnGenerate->setEnabled(true);
             m_btnGenerate->show();
             m_btnGenerate->setDescription(QString("Generate patch for %1").arg(data["name"]));
-            
             m_statusLabel->setText("Game not supported (Generator available)");
         }
-    }
-    else if (m_currentMode == AppMode::FixManager) {
-        // Fix Mode: Hide Patch/Generate, Show Fix
+    } else if (m_currentMode == AppMode::FixManager) {
         m_btnPatch->hide();
         m_btnGenerate->hide();
-        
         if (hasFix) {
             m_btnApplyFix->setEnabled(true);
             m_btnApplyFix->show();
@@ -734,62 +593,38 @@ void MainWindow::onGameSelected(QListWidgetItem* item) {
     }
 }
 
+// ---- Patch / Generate / Restart / Fix ----
 void MainWindow::doPatch() {
     if (m_selectedGame.isEmpty()) return;
-    
     m_btnPatch->setEnabled(false);
     m_progress->setValue(0);
-    // m_progress->show(); // Hide progress bar as we use terminal now
-    
-    // Setup Terminal Dialog
     m_terminalDialog->clear();
     m_terminalDialog->appendLog(QString("Initializing patch for: %1").arg(m_selectedGame["name"]), "INFO");
     m_terminalDialog->show();
     
     m_dlWorker = new LuaDownloadWorker(m_selectedGame["appid"], this);
-    
-    // Connect Signals
-    connect(m_dlWorker, &LuaDownloadWorker::finished,
-            this, &MainWindow::onPatchDone);
-            
-    connect(m_dlWorker, &LuaDownloadWorker::progress,
-            [this](qint64 downloaded, qint64 total) {
-                if (total > 0) {
-                    m_progress->setValue(static_cast<int>(downloaded * 100 / total));
-                }
-            });
-            
-    connect(m_dlWorker, &LuaDownloadWorker::status,
-            [this](QString msg) {
-                m_statusLabel->setText(msg);
-            });
-            
-    // Connect detailed logging
-    connect(m_dlWorker, &LuaDownloadWorker::log, 
-            m_terminalDialog, &TerminalDialog::appendLog);
-            
-    connect(m_dlWorker, &LuaDownloadWorker::error,
-            this, &MainWindow::onPatchError);
-            
+    connect(m_dlWorker, &LuaDownloadWorker::finished, this, &MainWindow::onPatchDone);
+    connect(m_dlWorker, &LuaDownloadWorker::progress, [this](qint64 dl, qint64 total) {
+        if (total > 0) m_progress->setValue(static_cast<int>(dl * 100 / total));
+    });
+    connect(m_dlWorker, &LuaDownloadWorker::status, [this](QString msg) { m_statusLabel->setText(msg); });
+    connect(m_dlWorker, &LuaDownloadWorker::log, m_terminalDialog, &TerminalDialog::appendLog);
+    connect(m_dlWorker, &LuaDownloadWorker::error, this, &MainWindow::onPatchError);
     m_dlWorker->start();
 }
 
 void MainWindow::onPatchDone(QString path) {
     try {
         m_terminalDialog->appendLog("Patch file downloaded. Installing...", "INFO");
-        
         QStringList targetDirs = Config::getAllSteamPluginDirs();
         if (targetDirs.isEmpty()) {
             targetDirs.append(Config::getSteamPluginDir());
             m_terminalDialog->appendLog("No cached plugin paths found, using default.", "WARN");
         }
-
-        bool atLeastOneSuccess = false;
-        QString lastError;
-
+        bool ok = false;
+        QString lastErr;
         for (const QString& pluginDir : targetDirs) {
             m_terminalDialog->appendLog(QString("checking for stplug folder: %1").arg(pluginDir), "INFO");
-            
             QDir dir(pluginDir);
             if (dir.exists()) {
                 m_terminalDialog->appendLog(QString("found stplug in %1").arg(pluginDir), "INFO");
@@ -800,40 +635,20 @@ void MainWindow::onPatchDone(QString path) {
                     continue;
                 }
             }
-            
             QString dest = dir.filePath(m_selectedGame["appid"] + ".lua");
-            
-            if (QFile::exists(dest)) {
-                m_terminalDialog->appendLog("Removing existing patch file...", "INFO");
-                QFile::remove(dest);
-            }
-            
+            if (QFile::exists(dest)) { m_terminalDialog->appendLog("Removing existing patch file...", "INFO"); QFile::remove(dest); }
             m_terminalDialog->appendLog(QString("Copying patch to %1").arg(dest), "INFO");
-            if (QFile::copy(path, dest)) {
-                m_terminalDialog->appendLog("Copy successful", "SUCCESS");
-                atLeastOneSuccess = true;
-            } else {
-                lastError = "Failed to copy patch file to " + pluginDir;
-                m_terminalDialog->appendLog(lastError, "ERROR");
-            }
+            if (QFile::copy(path, dest)) { m_terminalDialog->appendLog("Copy successful", "SUCCESS"); ok = true; }
+            else { lastErr = "Failed to copy patch file to " + pluginDir; m_terminalDialog->appendLog(lastErr, "ERROR"); }
         }
-
-        if (!atLeastOneSuccess) {
-             throw std::runtime_error(lastError.toStdString());
-        }
-        
-        // Clean up the downloaded file after copying to all destinations
+        if (!ok) throw std::runtime_error(lastErr.toStdString());
         QFile::remove(path);
-        
         m_progress->hide();
         m_btnPatch->setEnabled(true);
-        if(m_btnGenerate->isVisible()) m_btnGenerate->setEnabled(true);
-        
+        if (m_btnGenerate->isVisible()) m_btnGenerate->setEnabled(true);
         m_statusLabel->setText("Patch Installed!");
-        
         m_terminalDialog->appendLog("All operations completed successfully.", "SUCCESS");
         m_terminalDialog->setFinished(true);
-        
     } catch (const std::exception& e) {
         onPatchError(QString::fromStdString(e.what()));
     }
@@ -842,165 +657,89 @@ void MainWindow::onPatchDone(QString path) {
 void MainWindow::onPatchError(QString error) {
     m_progress->hide();
     m_btnPatch->setEnabled(true);
-    if(m_btnGenerate->isVisible()) m_btnGenerate->setEnabled(true);
-    
+    if (m_btnGenerate->isVisible()) m_btnGenerate->setEnabled(true);
     m_statusLabel->setText("Error");
-    
     m_terminalDialog->appendLog(QString("Process failed: %1").arg(error), "ERROR");
     m_terminalDialog->setFinished(false);
 }
 
 void MainWindow::doGenerate() {
     if (m_selectedGame.isEmpty()) return;
-    
     m_btnGenerate->setEnabled(false);
     m_progress->setValue(0);
-    
-    // Setup Terminal Dialog
     m_terminalDialog->clear();
     m_terminalDialog->appendLog(QString("Initializing generation for: %1 (%2)").arg(m_selectedGame["name"]).arg(m_selectedGame["appid"]), "INFO");
     m_terminalDialog->show();
     
     m_genWorker = new GeneratorWorker(m_selectedGame["appid"], this);
-    
-    // Connect Signals - GeneratorWorker now handles the file copy internally
-    connect(m_genWorker, &GeneratorWorker::finished,
-            this, [this](QString path) {
-                m_progress->hide();
-                m_btnGenerate->setEnabled(true);
-                m_statusLabel->setText("Patch Generated & Installed!");
-                m_terminalDialog->setFinished(true);
-                
-                // Update the list item to show green checkmark
-                QString appId = m_selectedGame["appid"];
-                for (int i = 0; i < m_resultsList->count(); ++i) {
-                    QListWidgetItem* item = m_resultsList->item(i);
-                    QMap<QString, QString> data = item->data(Qt::UserRole).value<QMap<QString, QString>>();
-                    
-                    if (data["appid"] == appId) {
-                        // Update status to patched/supported
-                        data["supported"] = "true";
-                        item->setData(Qt::UserRole, QVariant::fromValue(data));
-                        
-                        // Update display text
-                        QString name = data["name"];
-                        item->setText(QString("%1\nPatched • ID: %2").arg(name).arg(appId));
-                        
-                        // Update icon to green checkmark
-                        item->setIcon(createStatusIcon(true));
-                        item->setForeground(Colors::toQColor(Colors::ACCENT_GREEN));
-                        
-                        break;
-                    }
-                }
-                
-                // Hide the generate button since it's now patched
-                m_btnGenerate->hide();
-                
-                // Enable the patch button for future use
-                m_btnPatch->setEnabled(true);
-                m_btnPatch->setDescription(QString("Re-patch %1").arg(m_selectedGame["name"]));
-            });
-            
-    connect(m_genWorker, &GeneratorWorker::progress,
-            [this](qint64 downloaded, qint64 total) {
-                if (total > 0) {
-                    m_progress->setValue(static_cast<int>(downloaded * 100 / total));
-                }
-            });
-            
-    connect(m_genWorker, &GeneratorWorker::status,
-            [this](QString msg) {
-                m_statusLabel->setText(msg);
-            });
-            
-    connect(m_genWorker, &GeneratorWorker::log, 
-            m_terminalDialog, &TerminalDialog::appendLog);
-            
-    connect(m_genWorker, &GeneratorWorker::error,
-            this, &MainWindow::onPatchError);
-            
+    connect(m_genWorker, &GeneratorWorker::finished, this, [this](QString) {
+        m_progress->hide();
+        m_btnGenerate->setEnabled(true);
+        m_statusLabel->setText("Patch Generated & Installed!");
+        m_terminalDialog->setFinished(true);
+        QString appId = m_selectedGame["appid"];
+        for (GameCard* card : m_gameCards) {
+            if (card->appId() == appId) {
+                QMap<QString, QString> d = card->gameData();
+                d["supported"] = "true";
+                card->setGameData(d);
+                break;
+            }
+        }
+        m_btnGenerate->hide();
+        m_btnPatch->setEnabled(true);
+        m_btnPatch->setDescription(QString("Re-patch %1").arg(m_selectedGame["name"]));
+    });
+    connect(m_genWorker, &GeneratorWorker::progress, [this](qint64 dl, qint64 total) {
+        if (total > 0) m_progress->setValue(static_cast<int>(dl * 100 / total));
+    });
+    connect(m_genWorker, &GeneratorWorker::status, [this](QString msg) { m_statusLabel->setText(msg); });
+    connect(m_genWorker, &GeneratorWorker::log, m_terminalDialog, &TerminalDialog::appendLog);
+    connect(m_genWorker, &GeneratorWorker::error, this, &MainWindow::onPatchError);
     m_genWorker->start();
 }
 
 void MainWindow::doRestart() {
-    QMessageBox::StandardButton reply = QMessageBox::question(
-        this, "Restart Steam?", "Close Steam and all games?",
-        QMessageBox::Yes | QMessageBox::No);
-    
-    if (reply != QMessageBox::Yes) return;
-    
+    if (QMessageBox::question(this, "Restart Steam?", "Close Steam and all games?",
+                              QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes) return;
     m_restartWorker = new RestartWorker(this);
-    connect(m_restartWorker, &RestartWorker::finished,
-            m_statusLabel, &QLabel::setText);
+    connect(m_restartWorker, &RestartWorker::finished, m_statusLabel, &QLabel::setText);
     m_restartWorker->start();
 }
 
 void MainWindow::doApplyFix() {
     if (m_selectedGame.isEmpty()) return;
-    
-    // Prompt user to select the game installation folder
-    QString gamePath = QFileDialog::getExistingDirectory(
-        this,
+    QString gamePath = QFileDialog::getExistingDirectory(this,
         QString("Select Game Folder for %1").arg(m_selectedGame["name"]),
-        QString(),
-        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
-    );
-    
-    if (gamePath.isEmpty()) {
-        m_statusLabel->setText("Fix cancelled - no folder selected");
-        return;
-    }
+        QString(), QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+    if (gamePath.isEmpty()) { m_statusLabel->setText("Fix cancelled - no folder selected"); return; }
     
     m_btnApplyFix->setEnabled(false);
     m_progress->setValue(0);
-    
-    // Setup Terminal Dialog
     m_terminalDialog->clear();
     m_terminalDialog->appendLog(QString("Initializing fix for: %1").arg(m_selectedGame["name"]), "INFO");
     m_terminalDialog->appendLog(QString("Target folder: %1").arg(gamePath), "INFO");
     m_terminalDialog->show();
     
     m_fixWorker = new FixDownloadWorker(m_selectedGame["appid"], gamePath, this);
-    
-    // Connect Signals
-    connect(m_fixWorker, &FixDownloadWorker::finished,
-            this, [this](QString path) {
-                m_progress->hide();
-                m_btnApplyFix->setEnabled(true);
-                m_statusLabel->setText("Fix Applied Successfully!");
-                m_terminalDialog->setFinished(true);
-            });
-            
-    connect(m_fixWorker, &FixDownloadWorker::progress,
-            [this](qint64 downloaded, qint64 total) {
-                if (total > 0) {
-                    m_progress->setValue(static_cast<int>(downloaded * 100 / total));
-                }
-            });
-            
-    connect(m_fixWorker, &FixDownloadWorker::status,
-            [this](QString msg) {
-                m_statusLabel->setText(msg);
-            });
-            
-    connect(m_fixWorker, &FixDownloadWorker::log, 
-            m_terminalDialog, &TerminalDialog::appendLog);
-            
-    connect(m_fixWorker, &FixDownloadWorker::error,
-            this, &MainWindow::onPatchError);
-            
+    connect(m_fixWorker, &FixDownloadWorker::finished, this, [this](QString) {
+        m_progress->hide(); m_btnApplyFix->setEnabled(true);
+        m_statusLabel->setText("Fix Applied Successfully!");
+        m_terminalDialog->setFinished(true);
+    });
+    connect(m_fixWorker, &FixDownloadWorker::progress, [this](qint64 dl, qint64 total) {
+        if (total > 0) m_progress->setValue(static_cast<int>(dl * 100 / total));
+    });
+    connect(m_fixWorker, &FixDownloadWorker::status, [this](QString msg) { m_statusLabel->setText(msg); });
+    connect(m_fixWorker, &FixDownloadWorker::log, m_terminalDialog, &TerminalDialog::appendLog);
+    connect(m_fixWorker, &FixDownloadWorker::error, this, &MainWindow::onPatchError);
     m_fixWorker->start();
 }
 
+// ---- Mode switching ----
 void MainWindow::cancelNameFetches() {
     m_fetchingNames = false;
-    for (QNetworkReply* reply : m_activeNameFetches) {
-        if (reply) {
-            reply->abort();
-            reply->deleteLater();
-        }
-    }
+    for (QNetworkReply* r : m_activeNameFetches) { if (r) { r->abort(); r->deleteLater(); } }
     m_activeNameFetches.clear();
     m_pendingNameFetchIds.clear();
 }
@@ -1009,16 +748,8 @@ void MainWindow::switchMode(AppMode mode) {
     if (m_currentMode == mode) return;
     m_currentMode = mode;
     updateModeUI();
-    
-    // Clear selection and re-run search/filter
-    m_resultsList->clearSelection();
-    onGameSelected(nullptr);
-    
-    if (m_currentMode == AppMode::FixManager) {
-        populateFixList();
-    } else {
-        doSearch(); 
-    }
+    onCardClicked(nullptr);
+    if (m_currentMode == AppMode::FixManager) populateFixList(); else doSearch();
 }
 
 void MainWindow::populateFixList() {
@@ -1031,216 +762,129 @@ void MainWindow::populateFixList() {
         if (game.hasFix) {
             QJsonObject item;
             item["id"] = game.id;
-            
-            // If name is missing or is just the ID, fetch it
-            if (game.name.isEmpty() || game.name == game.id || game.name == "Unknown Game") {
-                 item["name"] = "Loading...";
-                 m_pendingNameFetchIds.append(game.id);
-            } else {
-                 item["name"] = game.name;
-            }
-            
-            item["supported_local"] = true; 
+            item["name"] = (game.name.isEmpty() || game.name == game.id || game.name == "Unknown Game")
+                ? "Loading..." : game.name;
+            if (game.name.isEmpty() || game.name == game.id || game.name == "Unknown Game")
+                m_pendingNameFetchIds.append(game.id);
+            item["supported_local"] = true;
             fixGames.append(item);
         }
     }
-    
     displayResults(fixGames);
-    
-    // Trigger fetch for unknown names
-    if (!m_pendingNameFetchIds.isEmpty()) {
-        startBatchNameFetch();
-    }
-    
-    if (m_resultsList->count() > 0) {
-        m_statusLabel->setText(QString("Found %1 available fixes").arg(m_resultsList->count()));
-    } else {
-        m_statusLabel->setText("No fixes available in current index.");
-    }
-    
+    if (!m_pendingNameFetchIds.isEmpty()) startBatchNameFetch();
+    m_statusLabel->setText(m_gameCards.isEmpty()
+        ? "No fixes available in current index."
+        : QString("Found %1 available fixes").arg(m_gameCards.count()));
     m_stack->setCurrentIndex(1);
     m_spinner->stop();
 }
 
 void MainWindow::updateModeUI() {
-    // Use the new GlassButton active state mechanism
-    if (m_currentMode == AppMode::LuaPatcher) {
-        m_tabLua->setActive(true);
-        m_tabFix->setActive(false);
-        m_stack->setCurrentIndex(1); 
-    } else {
-        m_tabLua->setActive(false);
-        m_tabFix->setActive(true);
-        // We might want to refresh the list here if it's empty, 
-        // but switchMode already calls populateFixList
-        m_stack->setCurrentIndex(1); 
-    }
+    m_tabLua->setActive(m_currentMode == AppMode::LuaPatcher);
+    m_tabFix->setActive(m_currentMode == AppMode::FixManager);
+    m_stack->setCurrentIndex(1);
 }
 
+// ---- Batch name fetch ----
 void MainWindow::startBatchNameFetch() {
-    if (m_pendingNameFetchIds.isEmpty()) {
-        m_fetchingNames = false;
-        m_spinner->stop();
-        return;
-    }
-    
+    if (m_pendingNameFetchIds.isEmpty()) { m_fetchingNames = false; m_spinner->stop(); return; }
     m_fetchingNames = true;
     m_nameFetchSearchId = m_currentSearchId;
     m_spinner->start();
-    m_statusLabel->setText(QString("Found %1 results • Fetching game names...")
-                          .arg(m_resultsList->count()));
-    
-    // Process up to 5 concurrent requests
-    int concurrentLimit = 5;
-    for (int i = 0; i < concurrentLimit && !m_pendingNameFetchIds.isEmpty(); ++i) {
-        processNextNameFetch();
-    }
+    m_statusLabel->setText(QString("Found %1 results %2 Fetching game names...").arg(m_gameCards.count()).arg(QChar(0x2022)));
+    for (int i = 0; i < 5 && !m_pendingNameFetchIds.isEmpty(); ++i) processNextNameFetch();
 }
 
 void MainWindow::processNextNameFetch() {
     if (m_pendingNameFetchIds.isEmpty() || !m_fetchingNames) {
-        // Check if all fetches are complete
         if (m_activeNameFetches.isEmpty() && m_fetchingNames) {
-            m_fetchingNames = false;
-            m_spinner->stop();
-            m_statusLabel->setText(QString("Found %1 results").arg(m_resultsList->count()));
+            m_fetchingNames = false; m_spinner->stop();
+            m_statusLabel->setText(QString("Found %1 results").arg(m_gameCards.count()));
         }
         return;
     }
-    
     QString appId = m_pendingNameFetchIds.takeFirst();
-    
-    // First try Steam Store API
     QUrl url(QString("https://store.steampowered.com/api/appdetails?appids=%1").arg(appId));
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::UserAgentHeader, "SteamLuaPatcher/2.0");
-    
     QNetworkReply* reply = m_networkManager->get(request);
     reply->setProperty("fetch_appid", appId);
     reply->setProperty("fetch_type", "steam_store");
     reply->setProperty("fetch_sid", m_nameFetchSearchId);
-    
     m_activeNameFetches.append(reply);
-    
-    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-        onGameNameFetched(reply);
-    });
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() { onGameNameFetched(reply); });
 }
 
 void MainWindow::onGameNameFetched(QNetworkReply* reply) {
     reply->deleteLater();
     m_activeNameFetches.removeOne(reply);
-    
-    // Ignore if search changed
     int fetchSid = reply->property("fetch_sid").toInt();
-    if (fetchSid != m_nameFetchSearchId || !m_fetchingNames) {
-        processNextNameFetch();
-        return;
-    }
+    if (fetchSid != m_nameFetchSearchId || !m_fetchingNames) { processNextNameFetch(); return; }
     
     QString appId = reply->property("fetch_appid").toString();
     QString fetchType = reply->property("fetch_type").toString();
     QString gameName;
     
     if (reply->error() == QNetworkReply::NoError) {
-        QByteArray data = reply->readAll();
-        QJsonDocument doc = QJsonDocument::fromJson(data);
-        QJsonObject obj = doc.object();
-        
+        QJsonObject obj = QJsonDocument::fromJson(reply->readAll()).object();
         if (fetchType == "steam_store") {
-            // Steam Store response: { "appid": { "success": true, "data": { "name": "..." } } }
             if (obj.contains(appId)) {
                 QJsonObject root = obj[appId].toObject();
-                if (root["success"].toBool() && root.contains("data")) {
-                    QJsonObject dataObj = root["data"].toObject();
-                    gameName = dataObj["name"].toString();
-                }
+                if (root["success"].toBool() && root.contains("data"))
+                    gameName = root["data"].toObject()["name"].toString();
             }
         } else if (fetchType == "steamspy") {
-            // SteamSpy response: { "appid": 123, "name": "..." }
-            if (obj.contains("name") && !obj["name"].toString().isEmpty()) {
+            if (obj.contains("name") && !obj["name"].toString().isEmpty())
                 gameName = obj["name"].toString();
-            }
         }
     }
     
-    // If Steam Store failed, try SteamSpy
     if (gameName.isEmpty() && fetchType == "steam_store") {
         QUrl spyUrl(QString("https://steamspy.com/api.php?request=appdetails&appid=%1").arg(appId));
-        QNetworkRequest spyRequest(spyUrl);
-        spyRequest.setHeader(QNetworkRequest::UserAgentHeader, "SteamLuaPatcher/2.0");
-        
-        QNetworkReply* spyReply = m_networkManager->get(spyRequest);
+        QNetworkRequest req(spyUrl);
+        req.setHeader(QNetworkRequest::UserAgentHeader, "SteamLuaPatcher/2.0");
+        QNetworkReply* spyReply = m_networkManager->get(req);
         spyReply->setProperty("fetch_appid", appId);
         spyReply->setProperty("fetch_type", "steamspy");
         spyReply->setProperty("fetch_sid", m_nameFetchSearchId);
-        
         m_activeNameFetches.append(spyReply);
-        
-        connect(spyReply, &QNetworkReply::finished, this, [this, spyReply]() {
-            onGameNameFetched(spyReply);
-        });
+        connect(spyReply, &QNetworkReply::finished, this, [this, spyReply]() { onGameNameFetched(spyReply); });
         return;
     }
     
-    // Update list item if we got a name
     if (!gameName.isEmpty()) {
-        for (int i = 0; i < m_resultsList->count(); ++i) {
-            QListWidgetItem* item = m_resultsList->item(i);
-            QMap<QString, QString> data = item->data(Qt::UserRole).value<QMap<QString, QString>>();
-            
-            if (data["appid"] == appId) {
-                bool supported = (data["supported"] == "true");
-                QString statusText = supported ? "Supported" : "Not Indexed";
-                item->setText(QString("%1\n%2 • ID: %3").arg(gameName).arg(statusText).arg(appId));
-                
-                data["name"] = gameName;
-                item->setData(Qt::UserRole, QVariant::fromValue(data));
+        for (GameCard* card : m_gameCards) {
+            if (card->appId() == appId) {
+                QMap<QString, QString> d = card->gameData();
+                d["name"] = gameName;
+                card->setGameData(d);
                 break;
             }
         }
     }
-    
-    // Process next in queue
     processNextNameFetch();
 }
 
+// ---- Thumbnail lazy loading ----
 void MainWindow::loadVisibleThumbnails() {
-    // Get visible range
-    QListWidgetItem* firstItem = m_resultsList->itemAt(0, 0);
-    if (!firstItem) return;
+    if (!m_scrollArea || !m_networkManager) return;
+    QRect visibleRect = m_scrollArea->viewport()->rect();
     
-    int startRow = m_resultsList->row(firstItem);
-    int endRow = startRow + (m_resultsList->height() / 68) + 2; // Approximate visible count + buffer
-    
-    for (int i = startRow; i <= endRow && i < m_resultsList->count(); ++i) {
-        QListWidgetItem* item = m_resultsList->item(i);
-        QMap<QString, QString> data = item->data(Qt::UserRole).value<QMap<QString, QString>>();
-        QString appId = data["appid"];
+    for (GameCard* card : m_gameCards) {
+        QPoint pos = m_gridContainer->mapTo(m_scrollArea->viewport(), card->geometry().topLeft());
+        QRect cardInView(pos, card->size());
+        if (!visibleRect.intersects(cardInView)) continue;
         
-        // Skip if valid thumbnail already exists (assume placeholder has specific key or check cache)
-        if (m_thumbnailCache.contains(appId)) continue;
-        
-        // Skip if already downloading
+        QString appId = card->appId();
+        if (appId.isEmpty() || card->hasThumbnail()) continue;
+        if (m_thumbnailCache.contains(appId)) { card->setThumbnail(m_thumbnailCache[appId]); continue; }
         if (m_activeThumbnailDownloads.contains(appId)) continue;
         
-        // Start download
         m_activeThumbnailDownloads.insert(appId);
-        
-        QString thumbnailUrl = QString("https://cdn.akamai.steamstatic.com/steam/apps/%1/header.jpg").arg(appId);
-        QNetworkRequest thumbRequest{QUrl(thumbnailUrl)};
-        QNetworkReply* thumbReply = m_networkManager->get(thumbRequest);
-        thumbReply->setProperty("appid", appId);
-        
-        // Prioritize the top item if it's the first one in the loop
-        if (i == startRow) {
-            // Unfortunately QNetworkAccessManager doesn't support request prioritization directly 
-            // easily without custom management, but order of request usually matters.
-        }
-        
-        connect(thumbReply, &QNetworkReply::finished, this, [this, thumbReply]() {
-            onThumbnailDownloaded(thumbReply);
-        });
+        QString thumbUrl = QString("https://cdn.akamai.steamstatic.com/steam/apps/%1/header.jpg").arg(appId);
+        QNetworkReply* tr = m_networkManager->get(QNetworkRequest{QUrl(thumbUrl)});
+        tr->setProperty("appid", appId);
+        connect(tr, &QNetworkReply::finished, this, [this, tr]() { onThumbnailDownloaded(tr); });
     }
 }
 
@@ -1248,47 +892,13 @@ void MainWindow::onThumbnailDownloaded(QNetworkReply* reply) {
     reply->deleteLater();
     QString appId = reply->property("appid").toString();
     m_activeThumbnailDownloads.remove(appId);
+    if (reply->error() != QNetworkReply::NoError || appId.isEmpty()) return;
     
-    if (reply->error() != QNetworkReply::NoError) {
-        // Silently fail for thumbnails, don't show errors
-        return;
-    }
-    
-    if (appId.isEmpty()) return;
-    
-    QByteArray imageData = reply->readAll();
     QPixmap pixmap;
-    
-    if (pixmap.loadFromData(imageData)) {
-        // Scale to fit icon size while maintaining aspect ratio
-        QPixmap scaledPixmap = pixmap.scaled(120, 68, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        
-        // Create rounded corners effect
-        QPixmap roundedPixmap(scaledPixmap.size());
-        roundedPixmap.fill(Qt::transparent);
-        
-        QPainter painter(&roundedPixmap);
-        painter.setRenderHint(QPainter::Antialiasing);
-        painter.setRenderHint(QPainter::SmoothPixmapTransform);
-        
-        QPainterPath path;
-        path.addRoundedRect(0, 0, scaledPixmap.width(), scaledPixmap.height(), 8, 8);
-        painter.setClipPath(path);
-        painter.drawPixmap(0, 0, scaledPixmap);
-        painter.end();
-        
-        // Cache the thumbnail
-        m_thumbnailCache[appId] = roundedPixmap;
-        
-        // Update the list item if it exists
-        for (int i = 0; i < m_resultsList->count(); ++i) {
-            QListWidgetItem* item = m_resultsList->item(i);
-            QMap<QString, QString> data = item->data(Qt::UserRole).value<QMap<QString, QString>>();
-            
-            if (data["appid"] == appId) {
-                item->setIcon(QIcon(roundedPixmap));
-                break;
-            }
+    if (pixmap.loadFromData(reply->readAll())) {
+        m_thumbnailCache[appId] = pixmap;
+        for (GameCard* card : m_gameCards) {
+            if (card->appId() == appId) { card->setThumbnail(pixmap); break; }
         }
     }
 }

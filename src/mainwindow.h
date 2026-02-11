@@ -6,7 +6,6 @@
 #include <QString>
 #include <QMap>
 #include <QLineEdit>
-#include <QListWidget>
 #include <QPushButton>
 #include <QLabel>
 #include <QProgressBar>
@@ -14,10 +13,12 @@
 #include <QTimer>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
-#include <QScrollBar>
+#include <QScrollArea>
+#include <QGridLayout>
 #include <QSet>
 
 class GlassButton;
+class GameCard;
 #include "utils/gameinfo.h"
 #include "terminaldialog.h"
 
@@ -46,14 +47,13 @@ protected:
 
 private slots:
     void onSyncDone(QList<GameInfo> games);
-
     void onSyncError(QString error);
     void onSearchChanged(const QString& text);
     void doSearch();
     void onSearchFinished(QNetworkReply* reply);
     void onGameNameFetched(QNetworkReply* reply);
     void onThumbnailDownloaded(QNetworkReply* reply);
-    void onGameSelected(QListWidgetItem* item);
+    void onCardClicked(GameCard* card);
     void doPatch();
     void onPatchDone(QString path);
     void onPatchError(QString error);
@@ -64,6 +64,7 @@ private slots:
     void updateModeUI();
     void processNextNameFetch();
     void populateFixList();
+    void loadVisibleThumbnails();
 
 private:
     void initUI();
@@ -71,15 +72,21 @@ private:
     void displayResults(const QJsonArray& items);
     void startBatchNameFetch();
     void cancelNameFetches();
-    QIcon createStatusIcon(bool supported);
+    void clearGameCards();
 
     // UI Components
     QLabel* m_statusLabel;
     QLineEdit* m_searchInput;
     QStackedWidget* m_stack;
     LoadingSpinner* m_spinner;
-    QListWidget* m_resultsList;
     QProgressBar* m_progress;
+    
+    // Grid components
+    QScrollArea* m_scrollArea;
+    QWidget* m_gridContainer;
+    QGridLayout* m_gridLayout;
+    QList<GameCard*> m_gameCards;
+    GameCard* m_selectedCard = nullptr;
     
     // Header & Tabs
     GlassButton* m_tabLua;
@@ -94,8 +101,7 @@ private:
 
     // Data
     QList<GameInfo> m_supportedGames;
-
-    QMap<QString, QString> m_selectedGame; // name, appid, supported
+    QMap<QString, QString> m_selectedGame;
     
     // Network
     QNetworkAccessManager* m_networkManager;
@@ -121,9 +127,6 @@ private:
     // Thumbnail cache
     QMap<QString, QPixmap> m_thumbnailCache;
     QSet<QString> m_activeThumbnailDownloads;
-    
-private slots:
-    void loadVisibleThumbnails();
 };
 
 #endif // MAINWINDOW_H
