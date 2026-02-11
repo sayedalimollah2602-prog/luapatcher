@@ -240,6 +240,7 @@ void MainWindow::initUI() {
     m_resultsList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_resultsList->setTextElideMode(Qt::ElideNone);
     connect(m_resultsList, &QListWidget::itemPressed, this, &MainWindow::onGameSelected);
+    connect(m_resultsList->verticalScrollBar(), &QScrollBar::valueChanged, this, &MainWindow::loadVisibleThumbnails);
     m_stack->addWidget(m_resultsList);
     mainLayout->addWidget(m_stack);
     
@@ -653,31 +654,21 @@ void MainWindow::displayResults(const QJsonArray& items) {
         
         m_resultsList->addItem(listItem);
         
-        // Download thumbnail for this game
+        // Lazy load: Only set if cached, otherwise wait for scroll/visible check
         if (m_thumbnailCache.contains(appid)) {
-            // Use cached thumbnail
             listItem->setIcon(QIcon(m_thumbnailCache[appid]));
-        } else {
-            // Download thumbnail from Steam CDN
-            QString thumbnailUrl = QString("https://cdn.akamai.steamstatic.com/steam/apps/%1/header.jpg").arg(appid);
-            QNetworkRequest thumbRequest{QUrl(thumbnailUrl)};
-            QNetworkReply* thumbReply = m_networkManager->get(thumbRequest);
-            thumbReply->setProperty("appid", appid);
-            connect(thumbReply, &QNetworkReply::finished, this, [this, thumbReply]() {
-                onThumbnailDownloaded(thumbReply);
-            });
         }
         
         // Track unknown games for batch fetch
         if (name.startsWith("Unknown Game") || name == "Unknown") {
             m_pendingNameFetchIds.append(appid);
         }
-        
-        // Also check if we just generated a patch for this game to update status effectively? 
-        // For now, no extra logic needed.
     }
     
     m_statusLabel->setText(QString("Found %1 results").arg(items.size()));
+    
+    // Trigger lazy load for currently visible items
+    QTimer::singleShot(10, this, &MainWindow::loadVisibleThumbnails);
     
     // Start fetching names for unknown games
     if (!m_pendingNameFetchIds.isEmpty()) {
@@ -1214,15 +1205,55 @@ void MainWindow::onGameNameFetched(QNetworkReply* reply) {
     processNextNameFetch();
 }
 
+void MainWindow::loadVisibleThumbnails() {
+    // Get visible range
+    QListWidgetItem* firstItem = m_resultsList->itemAt(0, 0);
+    if (!firstItem) return;
+    
+    int startRow = m_resultsList->row(firstItem);
+    int endRow = startRow + (m_resultsList->height() / 68) + 2; // Approximate visible count + buffer
+    
+    for (int i = startRow; i <= endRow && i < m_resultsList->count(); ++i) {
+        QListWidgetItem* item = m_resultsList->item(i);
+        QMap<QString, QString> data = item->data(Qt::UserRole).value<QMap<QString, QString>>();
+        QString appId = data["appid"];
+        
+        // Skip if valid thumbnail already exists (assume placeholder has specific key or check cache)
+        if (m_thumbnailCache.contains(appId)) continue;
+        
+        // Skip if already downloading
+        if (m_activeThumbnailDownloads.contains(appId)) continue;
+        
+        // Start download
+        m_activeThumbnailDownloads.insert(appId);
+        
+        QString thumbnailUrl = QString("https://cdn.akamai.steamstatic.com/steam/apps/%1/header.jpg").arg(appId);
+        QNetworkRequest thumbRequest{QUrl(thumbnailUrl)};
+        QNetworkReply* thumbReply = m_networkManager->get(thumbRequest);
+        thumbReply->setProperty("appid", appId);
+        
+        // Prioritize the top item if it's the first one in the loop
+        if (i == startRow) {
+            // Unfortunately QNetworkAccessManager doesn't support request prioritization directly 
+            // easily without custom management, but order of request usually matters.
+        }
+        
+        connect(thumbReply, &QNetworkReply::finished, this, [this, thumbReply]() {
+            onThumbnailDownloaded(thumbReply);
+        });
+    }
+}
+
 void MainWindow::onThumbnailDownloaded(QNetworkReply* reply) {
     reply->deleteLater();
+    QString appId = reply->property("appid").toString();
+    m_activeThumbnailDownloads.remove(appId);
     
     if (reply->error() != QNetworkReply::NoError) {
         // Silently fail for thumbnails, don't show errors
         return;
     }
     
-    QString appId = reply->property("appid").toString();
     if (appId.isEmpty()) return;
     
     QByteArray imageData = reply->readAll();

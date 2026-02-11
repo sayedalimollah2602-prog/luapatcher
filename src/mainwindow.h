@@ -14,6 +14,8 @@
 #include <QTimer>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QScrollBar>
+#include <QSet>
 
 class GlassButton;
 #include "utils/gameinfo.h"
@@ -118,6 +120,10 @@ private:
     
     // Thumbnail cache
     QMap<QString, QPixmap> m_thumbnailCache;
+    QSet<QString> m_activeThumbnailDownloads;
+    
+private slots:
+    void loadVisibleThumbnails();
 };
 
 #endif // MAINWINDOW_H
