@@ -27,6 +27,8 @@
 #include <QPainterPath>
 #include <QFileDialog>
 #include <QScrollBar>
+#include <QRandomGenerator>
+#include <algorithm>
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -254,6 +256,58 @@ void MainWindow::clearGameCards() {
     m_gameCards.clear();
 }
 
+// ---- Display random games from supported list ----
+void MainWindow::displayRandomGames() {
+    clearGameCards();
+    m_selectedGame.clear();
+    m_btnAddToLibrary->setEnabled(false);
+    cancelNameFetches();
+    m_pendingNameFetchIds.clear();
+
+    if (m_supportedGames.isEmpty()) return;
+
+    // Copy and shuffle to pick random games
+    QList<GameInfo> shuffled = m_supportedGames;
+    auto *rng = QRandomGenerator::global();
+    for (int i = shuffled.size() - 1; i > 0; --i) {
+        int j = rng->bounded(i + 1);
+        shuffled.swapItemsAt(i, j);
+    }
+
+    int count = qMin(12, shuffled.size());
+    for (int i = 0; i < count; ++i) {
+        const GameInfo& game = shuffled[i];
+
+        QMap<QString, QString> cd;
+        cd["name"] = (game.name.isEmpty() || game.name == game.id || game.name == "Unknown Game")
+            ? "Loading..." : game.name;
+        cd["appid"] = game.id;
+        cd["supported"] = "true";
+        cd["hasFix"] = game.hasFix ? "true" : "false";
+
+        if (game.name.isEmpty() || game.name == game.id || game.name == "Unknown Game")
+            m_pendingNameFetchIds.append(game.id);
+
+        GameCard* card = new GameCard(m_gridContainer);
+        card->setGameData(cd);
+        connect(card, &GameCard::clicked, this, &MainWindow::onCardClicked);
+
+        m_gridLayout->addWidget(card, i / 3, i % 3);
+        m_gameCards.append(card);
+
+        if (m_thumbnailCache.contains(game.id)) {
+            card->setThumbnail(m_thumbnailCache[game.id]);
+        }
+    }
+
+    QTimer::singleShot(50, this, &MainWindow::loadVisibleThumbnails);
+    if (!m_pendingNameFetchIds.isEmpty()) startBatchNameFetch();
+
+    m_statusLabel->setText(QString("Showing %1 random games").arg(m_gameCards.count()));
+    m_stack->setCurrentIndex(1);
+    m_spinner->stop();
+}
+
 // ---- Sync ----
 void MainWindow::startSync() {
     m_stack->setCurrentIndex(0);
@@ -271,7 +325,13 @@ void MainWindow::onSyncDone(QList<GameInfo> games) {
     m_stack->setCurrentIndex(1);
     m_statusLabel->setText("Ready");
     m_searchInput->setFocus();
-    if (!m_searchInput->text().isEmpty()) doSearch();
+    if (!m_searchInput->text().isEmpty()) {
+        doSearch();
+    } else if (m_currentMode == AppMode::LuaPatcher) {
+        displayRandomGames();
+    } else {
+        populateFixList();
+    }
 }
 
 void MainWindow::onSyncError(QString error) {
@@ -289,6 +349,11 @@ void MainWindow::onSearchChanged(const QString& text) {
         m_debounceTimer->start(400);
     } else {
         clearGameCards();
+        if (m_currentMode == AppMode::LuaPatcher) {
+            displayRandomGames();
+        } else {
+            populateFixList();
+        }
     }
 }
 
@@ -744,7 +809,16 @@ void MainWindow::switchMode(AppMode mode) {
     m_currentMode = mode;
     updateModeUI();
     onCardClicked(nullptr);
-    if (m_currentMode == AppMode::FixManager) populateFixList(); else doSearch();
+    clearGameCards();
+    if (m_currentMode == AppMode::FixManager) {
+        populateFixList();
+    } else {
+        if (m_searchInput->text().trimmed().isEmpty()) {
+            displayRandomGames();
+        } else {
+            doSearch();
+        }
+    }
 }
 
 void MainWindow::populateFixList() {

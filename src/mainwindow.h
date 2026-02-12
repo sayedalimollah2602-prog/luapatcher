@@ -74,6 +74,7 @@ private:
     void startBatchNameFetch();
     void cancelNameFetches();
     void clearGameCards();
+    void displayRandomGames();
 
     // UI Components
     QLabel* m_statusLabel;
