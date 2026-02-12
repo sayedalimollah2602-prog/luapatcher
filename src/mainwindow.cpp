@@ -368,7 +368,9 @@ void MainWindow::doSearch() {
     
     // Local search
     QJsonArray localResults;
+    int count = 0;
     for (const auto& game : m_supportedGames) {
+        if (count >= 100) break;
         if (m_currentMode == AppMode::FixManager && !game.hasFix) continue;
         if (game.name.contains(query, Qt::CaseInsensitive) || game.id == query) {
             QJsonObject item;
@@ -376,6 +378,7 @@ void MainWindow::doSearch() {
             item["name"] = game.name;
             item["supported_local"] = true;
             localResults.append(item);
+            count++;
         }
     }
     displayResults(localResults);
@@ -546,13 +549,19 @@ void MainWindow::displayResults(const QJsonArray& items) {
     clearGameCards();
     m_selectedGame.clear();
     m_btnAddToLibrary->setEnabled(false);
-    m_pendingNameFetchIds.clear();
     cancelNameFetches();
-    
+    m_pendingNameFetchIds.clear();
+
     if (items.isEmpty()) return;
-    
+
+    // Safety cap to prevent UI freeze
+    QJsonArray safeItems = items;
+    if (safeItems.size() > 120) {
+        while (safeItems.size() > 120) safeItems.removeAt(safeItems.size() - 1);
+    } 
+
     int idx = 0;
-    for (const QJsonValue& val : items) {
+    for (const QJsonValue& val : safeItems) {
         QJsonObject item = val.toObject();
         QString name = item["name"].toString("Unknown");
         QString appid = item.contains("id")
@@ -827,7 +836,9 @@ void MainWindow::populateFixList() {
     m_pendingNameFetchIds.clear();
     
     QJsonArray fixGames;
+    int count = 0;
     for (const auto& game : m_supportedGames) {
+        if (count >= 100) break;
         if (game.hasFix) {
             QJsonObject item;
             item["id"] = game.id;
@@ -837,6 +848,7 @@ void MainWindow::populateFixList() {
                 m_pendingNameFetchIds.append(game.id);
             item["supported_local"] = true;
             fixGames.append(item);
+            count++;
         }
     }
     displayResults(fixGames);
