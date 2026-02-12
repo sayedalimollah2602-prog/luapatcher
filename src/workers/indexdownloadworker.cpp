@@ -50,7 +50,7 @@ void IndexDownloadWorker::run() {
         QUrl requestUrl{urlStr};
         QNetworkRequest request{requestUrl};
         request.setHeader(QNetworkRequest::UserAgentHeader, "SteamLuaPatcher/2.0");
-        request.setRawHeader("X-Access-Token", Config::ACCESS_TOKEN.toUtf8());
+        request.setRawHeader("X-Access-Token", Config::getAccessToken().toUtf8());
         request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
         
         QEventLoop loop;
@@ -78,6 +78,15 @@ void IndexDownloadWorker::run() {
             }
         } else {
             // Network error, try cache
+            QString errorDetails;
+            if (reply->error() != QNetworkReply::NoError) {
+                int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+                errorDetails = QString("Network Error: %1").arg(reply->errorString());
+                if (statusCode > 0) errorDetails += QString(" (Status: %1)").arg(statusCode);
+            } else {
+                errorDetails = "Connection Timed Out";
+            }
+
             emit progress("Offline mode...");
             QFile file(indexPath);
             if (file.open(QIODevice::ReadOnly)) {
@@ -86,7 +95,7 @@ void IndexDownloadWorker::run() {
                 indexData = doc.object();
                 file.close();
             } else {
-                throw std::runtime_error("Network error & no cache");
+                throw std::runtime_error((errorDetails + " & No local cache").toStdString());
             }
         }
         

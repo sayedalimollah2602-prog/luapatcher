@@ -54,11 +54,12 @@ private slots:
     void onGameNameFetched(QNetworkReply* reply);
     void onThumbnailDownloaded(QNetworkReply* reply);
     void onCardClicked(GameCard* card);
-    void doPatch();
+    void doAddGame();
+    void runPatchLogic();
+    void runGenerateLogic();
     void onPatchDone(QString path);
     void onPatchError(QString error);
     void doRestart();
-    void doGenerate();
     void doApplyFix();
     void switchMode(AppMode mode);
     void updateModeUI();
@@ -93,8 +94,7 @@ private:
     GlassButton* m_tabFix;
     AppMode m_currentMode;
 
-    GlassButton* m_btnPatch;
-    GlassButton* m_btnGenerate;
+    GlassButton* m_btnAddToLibrary;
     GlassButton* m_btnApplyFix;
     GlassButton* m_btnRestart;
     TerminalDialog* m_terminalDialog;

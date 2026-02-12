@@ -1,0 +1,9 @@
+[  5%] Built target AppIcon
+[ 11%] Automatic MOC and UIC for target SteamLuaPatcher
+[ 11%] Built target SteamLuaPatcher_autogen
+[ 17%] Linking CXX executable SteamLuaPatcher.exe
+c:/programdata/chocolatey/lib/mingw/tools/install/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/11.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: cannot open output file SteamLuaPatcher.exe: Permission denied
+collect2.exe: error: ld returned 1 exit status
+mingw32-make[2]: *** [CMakeFiles\SteamLuaPatcher.dir\build.make:327: SteamLuaPatcher.exe] Error 1
+mingw32-make[1]: *** [CMakeFiles\Makefile2:112: CMakeFiles/SteamLuaPatcher.dir/all] Error 2
+mingw32-make: *** [Makefile:135: all] Error 2

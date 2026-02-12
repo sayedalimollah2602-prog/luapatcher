@@ -44,7 +44,7 @@ void FixDownloadWorker::run() {
         QUrl qurl{url};
         QNetworkRequest request{qurl};
         request.setHeader(QNetworkRequest::UserAgentHeader, "SteamLuaPatcher/2.0");
-        request.setRawHeader("X-Access-Token", Config::ACCESS_TOKEN.toUtf8());
+        request.setRawHeader("X-Access-Token", Config::getAccessToken().toUtf8());
         
         emit log("Connecting to server...", "INFO");
         QEventLoop loop;

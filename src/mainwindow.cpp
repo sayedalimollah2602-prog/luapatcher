@@ -42,7 +42,8 @@ MainWindow::MainWindow(QWidget* parent)
     , m_nameFetchSearchId(0)
 {
     setWindowTitle("Steam Lua Patcher");
-    setFixedSize(900, 600);
+    setMinimumSize(900, 600);
+    resize(900, 600);
     
     QString iconPath = Paths::getResourcePath("logo.ico");
     if (QFile::exists(iconPath)) {
@@ -132,18 +133,11 @@ void MainWindow::initUI() {
     sidebarLayout->addWidget(m_statusLabel);
     sidebarLayout->addStretch();
     
-    m_btnPatch = new GlassButton(QString::fromUtf8("⬇"), "Patch", "Install Patch", Colors::ACCENT_GREEN);
-    m_btnPatch->setFixedHeight(50);
-    m_btnPatch->setEnabled(false);
-    connect(m_btnPatch, &QPushButton::clicked, this, &MainWindow::doPatch);
-    sidebarLayout->addWidget(m_btnPatch);
-    
-    m_btnGenerate = new GlassButton(QString::fromUtf8("⚙"), "Generate", "Fetch Data", Colors::ACCENT_BLUE);
-    m_btnGenerate->setFixedHeight(50);
-    m_btnGenerate->setEnabled(false);
-    m_btnGenerate->hide();
-    connect(m_btnGenerate, &QPushButton::clicked, this, &MainWindow::doGenerate);
-    sidebarLayout->addWidget(m_btnGenerate);
+    m_btnAddToLibrary = new GlassButton(QString::fromUtf8("➕"), "Add to Library", "Install / Generate Patch", Colors::ACCENT_GREEN);
+    m_btnAddToLibrary->setFixedHeight(50);
+    m_btnAddToLibrary->setEnabled(false);
+    connect(m_btnAddToLibrary, &QPushButton::clicked, this, &MainWindow::doAddGame);
+    sidebarLayout->addWidget(m_btnAddToLibrary);
     
     m_btnApplyFix = new GlassButton(QString::fromUtf8("🔧"), "Apply Fix", "Apply Fix Files", Colors::ACCENT_PURPLE);
     m_btnApplyFix->setFixedHeight(50);
@@ -225,8 +219,8 @@ void MainWindow::initUI() {
     m_gridContainer = new QWidget();
     m_gridContainer->setStyleSheet("background: transparent;");
     m_gridLayout = new QGridLayout(m_gridContainer);
-    m_gridLayout->setContentsMargins(0, 0, 0, 0);
-    m_gridLayout->setSpacing(8);
+    m_gridLayout->setContentsMargins(4, 4, 4, 4);
+    m_gridLayout->setSpacing(12);
     
     m_scrollArea->setWidget(m_gridContainer);
     connect(m_scrollArea->verticalScrollBar(), &QScrollBar::valueChanged,
@@ -363,16 +357,18 @@ void MainWindow::onSearchFinished(QNetworkReply* reply) {
     if (reply == m_activeReply) m_activeReply = nullptr;
     if (reply->error() == QNetworkReply::OperationCanceledError) return;
     
+    // Skip non-search replies (thumbnails, name fetches, etc.)
+    QString type = reply->property("type").toString();
+    if (type.isEmpty()) return;
+    
     int sid = reply->property("sid").toInt();
     if (sid != m_currentSearchId) return;
     
     if (reply->error() != QNetworkReply::NoError) {
-        if (m_gameCards.isEmpty() && reply->property("type").toString() == "store_search")
+        if (m_gameCards.isEmpty() && type == "store_search")
             m_statusLabel->setText("Search failed");
         return;
     }
-    
-    QString type = reply->property("type").toString();
     QByteArray data = reply->readAll();
     QJsonDocument doc = QJsonDocument::fromJson(data);
     QJsonObject obj = doc.object();
@@ -456,7 +452,7 @@ void MainWindow::onSearchFinished(QNetworkReply* reply) {
             connect(card, &GameCard::clicked, this, &MainWindow::onCardClicked);
             
             int idx = m_gameCards.count();
-            m_gridLayout->addWidget(card, idx / 4, idx % 4);
+            m_gridLayout->addWidget(card, idx / 3, idx % 3);
             m_gameCards.append(card);
             cardMap.insert(id, card);
             changed = true;
@@ -484,7 +480,7 @@ void MainWindow::onSearchFinished(QNetworkReply* reply) {
 void MainWindow::displayResults(const QJsonArray& items) {
     clearGameCards();
     m_selectedGame.clear();
-    m_btnPatch->setEnabled(false);
+    m_btnAddToLibrary->setEnabled(false);
     m_pendingNameFetchIds.clear();
     cancelNameFetches();
     
@@ -521,7 +517,7 @@ void MainWindow::displayResults(const QJsonArray& items) {
         card->setGameData(cd);
         connect(card, &GameCard::clicked, this, &MainWindow::onCardClicked);
         
-        m_gridLayout->addWidget(card, idx / 4, idx % 4);
+        m_gridLayout->addWidget(card, idx / 3, idx % 3);
         m_gameCards.append(card);
         
         if (m_thumbnailCache.contains(appid)) {
@@ -547,8 +543,7 @@ void MainWindow::onCardClicked(GameCard* card) {
     if (!card) {
         m_selectedCard = nullptr;
         m_selectedGame.clear();
-        m_btnPatch->setEnabled(false);
-        m_btnGenerate->hide();
+        m_btnAddToLibrary->setEnabled(false);
         m_btnApplyFix->hide();
         m_statusLabel->setText("Ready");
         return;
@@ -564,23 +559,20 @@ void MainWindow::onCardClicked(GameCard* card) {
     
     if (m_currentMode == AppMode::LuaPatcher) {
         m_btnApplyFix->hide();
-        m_btnPatch->show();
+        m_btnAddToLibrary->show();
+        m_btnAddToLibrary->setEnabled(true);
+        m_btnAddToLibrary->setText("Add to Library");
+        
         if (isSupported) {
-            m_btnPatch->setEnabled(true);
-            m_btnPatch->setDescription(QString("Install patch for %1").arg(data["name"]));
-            m_statusLabel->setText(QString("Selected: %1").arg(data["name"]));
-            m_btnGenerate->hide();
+            m_btnAddToLibrary->setDescription(QString("Install patch for %1").arg(data["name"]));
+            m_btnAddToLibrary->setColor(Colors::ACCENT_GREEN);
         } else {
-            m_btnPatch->setEnabled(false);
-            m_btnPatch->setDescription("Patch unavailable for this game");
-            m_btnGenerate->setEnabled(true);
-            m_btnGenerate->show();
-            m_btnGenerate->setDescription(QString("Generate patch for %1").arg(data["name"]));
-            m_statusLabel->setText("Game not supported (Generator available)");
+            m_btnAddToLibrary->setDescription(QString("Generate patch for %1").arg(data["name"]));
+            m_btnAddToLibrary->setColor(Colors::ACCENT_BLUE);
         }
+        m_statusLabel->setText(QString("Selected: %1").arg(data["name"]));
     } else if (m_currentMode == AppMode::FixManager) {
-        m_btnPatch->hide();
-        m_btnGenerate->hide();
+        m_btnAddToLibrary->hide();
         if (hasFix) {
             m_btnApplyFix->setEnabled(true);
             m_btnApplyFix->show();
@@ -594,9 +586,15 @@ void MainWindow::onCardClicked(GameCard* card) {
 }
 
 // ---- Patch / Generate / Restart / Fix ----
-void MainWindow::doPatch() {
+void MainWindow::doAddGame() {
     if (m_selectedGame.isEmpty()) return;
-    m_btnPatch->setEnabled(false);
+    bool isSupported = (m_selectedGame["supported"] == "true");
+    if (isSupported) runPatchLogic(); else runGenerateLogic();
+}
+
+void MainWindow::runPatchLogic() {
+    if (m_selectedGame.isEmpty()) return;
+    m_btnAddToLibrary->setEnabled(false);
     m_progress->setValue(0);
     m_terminalDialog->clear();
     m_terminalDialog->appendLog(QString("Initializing patch for: %1").arg(m_selectedGame["name"]), "INFO");
@@ -644,8 +642,7 @@ void MainWindow::onPatchDone(QString path) {
         if (!ok) throw std::runtime_error(lastErr.toStdString());
         QFile::remove(path);
         m_progress->hide();
-        m_btnPatch->setEnabled(true);
-        if (m_btnGenerate->isVisible()) m_btnGenerate->setEnabled(true);
+        m_btnAddToLibrary->setEnabled(true);
         m_statusLabel->setText("Patch Installed!");
         m_terminalDialog->appendLog("All operations completed successfully.", "SUCCESS");
         m_terminalDialog->setFinished(true);
@@ -656,16 +653,15 @@ void MainWindow::onPatchDone(QString path) {
 
 void MainWindow::onPatchError(QString error) {
     m_progress->hide();
-    m_btnPatch->setEnabled(true);
-    if (m_btnGenerate->isVisible()) m_btnGenerate->setEnabled(true);
+    m_btnAddToLibrary->setEnabled(true);
     m_statusLabel->setText("Error");
     m_terminalDialog->appendLog(QString("Process failed: %1").arg(error), "ERROR");
     m_terminalDialog->setFinished(false);
 }
 
-void MainWindow::doGenerate() {
+void MainWindow::runGenerateLogic() {
     if (m_selectedGame.isEmpty()) return;
-    m_btnGenerate->setEnabled(false);
+    m_btnAddToLibrary->setEnabled(false);
     m_progress->setValue(0);
     m_terminalDialog->clear();
     m_terminalDialog->appendLog(QString("Initializing generation for: %1 (%2)").arg(m_selectedGame["name"]).arg(m_selectedGame["appid"]), "INFO");
@@ -674,7 +670,7 @@ void MainWindow::doGenerate() {
     m_genWorker = new GeneratorWorker(m_selectedGame["appid"], this);
     connect(m_genWorker, &GeneratorWorker::finished, this, [this](QString) {
         m_progress->hide();
-        m_btnGenerate->setEnabled(true);
+        m_btnAddToLibrary->setEnabled(true);
         m_statusLabel->setText("Patch Generated & Installed!");
         m_terminalDialog->setFinished(true);
         QString appId = m_selectedGame["appid"];
@@ -686,9 +682,8 @@ void MainWindow::doGenerate() {
                 break;
             }
         }
-        m_btnGenerate->hide();
-        m_btnPatch->setEnabled(true);
-        m_btnPatch->setDescription(QString("Re-patch %1").arg(m_selectedGame["name"]));
+        m_btnAddToLibrary->setDescription(QString("Re-patch %1").arg(m_selectedGame["name"]));
+        m_btnAddToLibrary->setColor(Colors::ACCENT_GREEN);
     });
     connect(m_genWorker, &GeneratorWorker::progress, [this](qint64 dl, qint64 total) {
         if (total > 0) m_progress->setValue(static_cast<int>(dl * 100 / total));

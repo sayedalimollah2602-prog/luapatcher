@@ -15,6 +15,7 @@ public:
     void setDescription(const QString& desc);
     void setEnabled(bool enabled);
     void setActive(bool active);
+    void setColor(const QString& color);
 
 protected:
     void paintEvent(QPaintEvent* event) override;

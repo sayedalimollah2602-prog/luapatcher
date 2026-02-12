@@ -10,8 +10,12 @@ set(CMAKE_AUTOUIC ON)
 # Option for static build
 option(BUILD_STATIC "Build with static Qt libraries" OFF)
 
-# Server access token for API security
-set(ACCESS_TOKEN "dev-token-replace-in-prod" CACHE STRING "Access token for the server")
+# Server access token - passed via macro during compilation
+if(DEFINED ENV{SERVER_ACCESS_TOKEN})
+    set(ACCESS_TOKEN "$ENV{SERVER_ACCESS_TOKEN}" CACHE STRING "Access token for the server" FORCE)
+else()
+    set(ACCESS_TOKEN "dev-token-replace-in-prod" CACHE STRING "Access token for the server")
+endif()
 add_definitions(-DSERVER_ACCESS_TOKEN="${ACCESS_TOKEN}")
 
 # Find Qt6 - Core components only

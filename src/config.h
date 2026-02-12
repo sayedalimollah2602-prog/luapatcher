@@ -10,11 +10,19 @@ namespace Config {
     const QString APP_VERSION = "1.2.1";
     const QString WEBSERVER_BASE_URL = "https://webserver-ecru.vercel.app";
     
-    // Server access token - passed via macro during compilation
-    #ifndef SERVER_ACCESS_TOKEN
-    #define SERVER_ACCESS_TOKEN "dev-token-replace-in-prod"
-    #endif
-    const QString ACCESS_TOKEN = QString(SERVER_ACCESS_TOKEN);
+    // Server access token - check local file first, then macro
+    inline QString getAccessToken() {
+        QFile file("server_token.txt");
+        if (file.exists() && file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QString token = QString::fromUtf8(file.readAll()).trimmed();
+            if (!token.isEmpty()) return token;
+        }
+        #ifndef SERVER_ACCESS_TOKEN
+        return "dev-token-replace-in-prod";
+        #else
+        return QString(SERVER_ACCESS_TOKEN);
+        #endif
+    }
     
     // Use inline functions to avoid static initialization issues
     inline QString gamesIndexUrl() {

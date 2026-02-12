@@ -5,15 +5,16 @@
 #include <QPainterPath>
 #include <QMouseEvent>
 #include <QLinearGradient>
+#include <QRadialGradient>
 #include <QFont>
 
 GameCard::GameCard(QWidget* parent)
     : QWidget(parent)
 {
-    setMinimumSize(140, 120);
+    setMinimumSize(160, 200);
     setCursor(Qt::PointingHandCursor);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    setFixedHeight(180);
+    setFixedHeight(220);
 }
 
 void GameCard::setGameData(const QMap<QString, QString>& data) {
@@ -55,8 +56,9 @@ void GameCard::paintEvent(QPaintEvent* event) {
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
 
-    QRect cardRect = rect().adjusted(4, 4, -4, -4);
-    int radius = 10;
+    QRect cardRect = rect().adjusted(5, 5, -5, -5);
+    int radius = 14;
+    bool supported = (m_data.value("supported") == "true");
 
     // Clip to rounded rect
     QPainterPath clipPath;
@@ -66,84 +68,123 @@ void GameCard::paintEvent(QPaintEvent* event) {
     if (m_hasThumbnail) {
         // Stretch thumbnail to fill the entire card
         painter.drawPixmap(cardRect, m_thumbnail);
+
+        // Subtle dark vignette overlay for depth
+        QRadialGradient vignette(cardRect.center(), cardRect.width() * 0.7);
+        vignette.setColorAt(0, QColor(0, 0, 0, 0));
+        vignette.setColorAt(1, QColor(0, 0, 0, 80));
+        painter.fillRect(cardRect, vignette);
     } else {
-        // Dark glass background
-        QLinearGradient bg(cardRect.topLeft(), cardRect.bottomLeft());
-        bg.setColorAt(0, QColor(30, 41, 59, 200));
-        bg.setColorAt(1, QColor(15, 23, 42, 220));
+        // Rich glass background gradient
+        QLinearGradient bg(cardRect.topLeft(), cardRect.bottomRight());
+        bg.setColorAt(0, QColor(30, 41, 59, 220));
+        bg.setColorAt(0.5, QColor(20, 30, 48, 230));
+        bg.setColorAt(1, QColor(10, 18, 32, 240));
         painter.fillRect(cardRect, bg);
 
-        // Large default gamepad icon
-        QFont iconFont("Segoe UI Emoji", 40);
-        painter.setFont(iconFont);
-        painter.setPen(QColor(148, 163, 184, 120));
+        // Subtle pattern: inner glow
+        QRadialGradient glow(cardRect.center(), cardRect.height() * 0.5);
+        glow.setColorAt(0, QColor(59, 130, 246, 15));
+        glow.setColorAt(1, QColor(0, 0, 0, 0));
+        painter.fillRect(cardRect, glow);
 
-        QRect iconArea = cardRect.adjusted(0, 0, 0, -45);
-        painter.drawText(iconArea, Qt::AlignCenter, QString::fromUtf8("🎮"));
+        // Large default gamepad icon
+        QFont iconFont("Segoe UI Emoji", 48);
+        painter.setFont(iconFont);
+        painter.setPen(QColor(148, 163, 184, 80));
+
+        QRect iconArea = cardRect.adjusted(0, -15, 0, -55);
+        painter.drawText(iconArea, Qt::AlignCenter, QString::fromUtf8("\xF0\x9F\x8E\xAE"));
     }
 
-    // Bottom info gradient overlay
-    int infoHeight = 50;
+    // ---- Bottom info gradient overlay ----
+    int infoHeight = 65;
     QRect infoRect(cardRect.left(), cardRect.bottom() - infoHeight, cardRect.width(), infoHeight);
 
     QLinearGradient infoGrad(infoRect.topLeft(), infoRect.bottomLeft());
     infoGrad.setColorAt(0, QColor(0, 0, 0, 0));
-    infoGrad.setColorAt(0.3, QColor(0, 0, 0, 160));
-    infoGrad.setColorAt(1, QColor(0, 0, 0, 220));
+    infoGrad.setColorAt(0.25, QColor(0, 0, 0, 140));
+    infoGrad.setColorAt(1, QColor(0, 0, 0, 230));
     painter.fillRect(infoRect, infoGrad);
 
-    // Game name
+    // Game name (larger, bolder)
     QString name = m_data.value("name", "Unknown");
-    QFont nameFont("Segoe UI", 9, QFont::Bold);
+    QFont nameFont("Segoe UI", 10, QFont::Bold);
     painter.setFont(nameFont);
     painter.setPen(Qt::white);
 
-    QRect nameRect = infoRect.adjusted(8, 6, -8, -16);
+    QRect nameRect(infoRect.left() + 12, infoRect.top() + 10, infoRect.width() - 24, 22);
     QFontMetrics fm(nameFont);
     QString elidedName = fm.elidedText(name, Qt::ElideRight, nameRect.width());
     painter.drawText(nameRect, Qt::AlignLeft | Qt::AlignVCenter, elidedName);
 
-    // Status line
-    bool supported = (m_data.value("supported") == "true");
-    QString statusText = supported ? "Supported" : "Not Indexed";
-    QString idText = QString("ID: %1").arg(m_data.value("appid", "?"));
-
-    QFont statusFont("Segoe UI", 7);
-    painter.setFont(statusFont);
-    painter.setPen(supported ? Colors::toQColor(Colors::ACCENT_GREEN)
-                             : QColor(148, 163, 184));
-
-    QRect statusRect = infoRect.adjusted(8, 20, -8, -2);
-    painter.drawText(statusRect, Qt::AlignLeft | Qt::AlignVCenter,
-                     QString("%1 • %2").arg(statusText).arg(idText));
+    // App ID line
+    QFont idFont("Segoe UI", 8);
+    painter.setFont(idFont);
+    painter.setPen(QColor(180, 190, 210, 180));
+    QRect idRect(infoRect.left() + 12, infoRect.top() + 36, infoRect.width() - 24, 20);
+    painter.drawText(idRect, Qt::AlignLeft | Qt::AlignVCenter,
+                     QString("ID: %1").arg(m_data.value("appid", "?")));
 
     // Reset clip for border drawing
     painter.setClipRect(rect());
 
-    // Selection / hover border
+    // ---- Border & glow effects ----
     if (m_selected) {
-        QPen selPen(Colors::toQColor(Colors::ACCENT_BLUE), 2.5);
+        // Outer glow
+        for (int i = 3; i >= 1; --i) {
+            QPen glowPen(QColor(59, 130, 246, 30 * i), i * 1.5);
+            painter.setPen(glowPen);
+            painter.setBrush(Qt::NoBrush);
+            painter.drawRoundedRect(cardRect.adjusted(-i, -i, i, i), radius + i, radius + i);
+        }
+        // Main selection border
+        QPen selPen(Colors::toQColor(Colors::ACCENT_BLUE), 2);
         painter.setPen(selPen);
         painter.setBrush(Qt::NoBrush);
-        painter.drawRoundedRect(cardRect.adjusted(1, 1, -1, -1), radius, radius);
+        painter.drawRoundedRect(cardRect, radius, radius);
     } else if (m_hovered) {
-        QPen hovPen(QColor(255, 255, 255, 60), 1.5);
+        // Hover glow
+        QPen hovPen(QColor(255, 255, 255, 50), 1.5);
         painter.setPen(hovPen);
         painter.setBrush(Qt::NoBrush);
-        painter.drawRoundedRect(cardRect.adjusted(1, 1, -1, -1), radius, radius);
+        painter.drawRoundedRect(cardRect, radius, radius);
+
+        // Subtle inner highlight at top
+        painter.setClipPath(clipPath);
+        QLinearGradient topShine(cardRect.topLeft(), QPoint(cardRect.left(), cardRect.top() + 40));
+        topShine.setColorAt(0, QColor(255, 255, 255, 20));
+        topShine.setColorAt(1, QColor(255, 255, 255, 0));
+        painter.fillRect(QRect(cardRect.left(), cardRect.top(), cardRect.width(), 40), topShine);
+        painter.setClipRect(rect());
     } else {
-        // Subtle border
-        QPen borderPen(QColor(255, 255, 255, 20), 1);
+        // Resting border
+        QPen borderPen(QColor(255, 255, 255, 15), 1);
         painter.setPen(borderPen);
         painter.setBrush(Qt::NoBrush);
-        painter.drawRoundedRect(cardRect.adjusted(1, 1, -1, -1), radius, radius);
+        painter.drawRoundedRect(cardRect, radius, radius);
     }
 
-    // Supported accent dot (top-right)
+    // Supported badge (top-right corner)
     if (supported) {
+        painter.setClipPath(clipPath);
+        // Green gradient badge
+        QRect badge(cardRect.right() - 28, cardRect.top() + 6, 22, 22);
+        QRadialGradient badgeGrad(badge.center(), 11);
+        badgeGrad.setColorAt(0, Colors::toQColor(Colors::ACCENT_GREEN));
+        badgeGrad.setColorAt(1, QColor(16, 185, 129, 180));
         painter.setPen(Qt::NoPen);
-        painter.setBrush(Colors::toQColor(Colors::ACCENT_GREEN));
-        painter.drawEllipse(cardRect.right() - 16, cardRect.top() + 8, 8, 8);
+        painter.setBrush(badgeGrad);
+        painter.drawEllipse(badge);
+
+        // Checkmark
+        painter.setPen(QPen(Qt::white, 2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        QPainterPath check;
+        check.moveTo(badge.left() + 5, badge.center().y());
+        check.lineTo(badge.center().x() - 1, badge.bottom() - 6);
+        check.lineTo(badge.right() - 5, badge.top() + 6);
+        painter.drawPath(check);
+        painter.setClipRect(rect());
     }
 }
 
