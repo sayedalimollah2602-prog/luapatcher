@@ -121,6 +121,11 @@ void MainWindow::initUI() {
     m_tabFix->setFixedHeight(40);
     connect(m_tabFix, &QPushButton::clicked, this, [this](){ switchMode(AppMode::FixManager); });
     sidebarLayout->addWidget(m_tabFix);
+
+    m_tabLibrary = new GlassButton(QString::fromUtf8("📚"), " Library", "", Colors::ACCENT_GREEN);
+    m_tabLibrary->setFixedHeight(40);
+    connect(m_tabLibrary, &QPushButton::clicked, this, [this](){ switchMode(AppMode::Library); });
+    sidebarLayout->addWidget(m_tabLibrary);
     
     sidebarLayout->addSpacing(10);
     QFrame* line = new QFrame();
@@ -135,18 +140,25 @@ void MainWindow::initUI() {
     sidebarLayout->addWidget(m_statusLabel);
     sidebarLayout->addStretch();
     
-    m_btnAddToLibrary = new GlassButton(QString::fromUtf8("➕"), "Add to Library", "Install / Generate Patch", Colors::ACCENT_GREEN);
+    m_btnAddToLibrary = new GlassButton(QString::fromUtf8("⚡"), "Add to Library", "Install / Generate Patch", Colors::ACCENT_GREEN);
     m_btnAddToLibrary->setFixedHeight(50);
     m_btnAddToLibrary->setEnabled(false);
     connect(m_btnAddToLibrary, &QPushButton::clicked, this, &MainWindow::doAddGame);
     sidebarLayout->addWidget(m_btnAddToLibrary);
-    
+
     m_btnApplyFix = new GlassButton(QString::fromUtf8("🔧"), "Apply Fix", "Apply Fix Files", Colors::ACCENT_PURPLE);
     m_btnApplyFix->setFixedHeight(50);
     m_btnApplyFix->setEnabled(false);
     m_btnApplyFix->hide();
     connect(m_btnApplyFix, &QPushButton::clicked, this, &MainWindow::doApplyFix);
     sidebarLayout->addWidget(m_btnApplyFix);
+
+    m_btnRemove = new GlassButton(QString::fromUtf8("🗑"), "Remove", "Remove from Library", Colors::ACCENT_RED);
+    m_btnRemove->setFixedHeight(50);
+    m_btnRemove->setEnabled(false);
+    m_btnRemove->hide();
+    connect(m_btnRemove, &QPushButton::clicked, this, &MainWindow::doRemoveGame);
+    sidebarLayout->addWidget(m_btnRemove);
     
     sidebarLayout->addSpacing(10);
     m_btnRestart = new GlassButton(QString::fromUtf8("↻"), "Restart Steam", "Apply Changes", Colors::ACCENT_PURPLE);
@@ -306,6 +318,79 @@ void MainWindow::displayRandomGames() {
     m_statusLabel->setText(QString("Showing %1 random games").arg(m_gameCards.count()));
     m_stack->setCurrentIndex(1);
     m_spinner->stop();
+    m_stack->setCurrentIndex(1);
+    m_spinner->stop();
+}
+
+// ---- Display installed patches (Library) ----
+void MainWindow::displayLibrary() {
+    clearGameCards();
+    m_selectedGame.clear();
+    m_btnAddToLibrary->setEnabled(false);
+    cancelNameFetches();
+    m_pendingNameFetchIds.clear();
+
+    QStringList pluginDirs = Config::getAllSteamPluginDirs();
+    QSet<QString> installedAppIds;
+    
+    for (const QString& dirPath : pluginDirs) {
+        QDir dir(dirPath);
+        QStringList luaFiles = dir.entryList({"*.lua"}, QDir::Files);
+        for (const QString& file : luaFiles) {
+            QString appId = QFileInfo(file).baseName();
+            if (!appId.isEmpty()) installedAppIds.insert(appId);
+        }
+    }
+
+    if (installedAppIds.isEmpty()) {
+        m_statusLabel->setText("No patches installed found.");
+        m_stack->setCurrentIndex(1);
+        return;
+    }
+
+    int count = 0;
+    for (const QString& appId : installedAppIds) {
+        if (count >= 100) break;
+
+        QString name = "Unknown Game";
+        bool hasFix = false;
+        
+        // Try to find name in supported games
+        for (const auto& g : m_supportedGames) {
+            if (g.id == appId) {
+                name = g.name;
+                hasFix = g.hasFix;
+                break;
+            }
+        }
+
+        if (name == "Unknown Game") m_pendingNameFetchIds.append(appId);
+
+        QMap<QString, QString> cd;
+        cd["name"] = name;
+        cd["appid"] = appId;
+        cd["supported"] = "true"; // Installed means supported effectively
+        cd["hasFix"] = hasFix ? "true" : "false";
+
+        GameCard* card = new GameCard(m_gridContainer);
+        card->setGameData(cd);
+        connect(card, &GameCard::clicked, this, &MainWindow::onCardClicked);
+
+        m_gridLayout->addWidget(card, count / 3, count % 3);
+        m_gameCards.append(card);
+
+        if (m_thumbnailCache.contains(appId)) {
+            card->setThumbnail(m_thumbnailCache[appId]);
+        }
+        count++;
+    }
+
+    QTimer::singleShot(50, this, &MainWindow::loadVisibleThumbnails);
+    if (!m_pendingNameFetchIds.isEmpty()) startBatchNameFetch();
+
+    m_statusLabel->setText(QString("Found %1 installed patches").arg(m_gameCards.count()));
+    m_stack->setCurrentIndex(1);
+    m_spinner->stop();
 }
 
 // ---- Sync ----
@@ -329,6 +414,8 @@ void MainWindow::onSyncDone(QList<GameInfo> games) {
         doSearch();
     } else if (m_currentMode == AppMode::LuaPatcher) {
         displayRandomGames();
+    } else if (m_currentMode == AppMode::Library) {
+        displayLibrary();
     } else {
         populateFixList();
     }
@@ -351,6 +438,8 @@ void MainWindow::onSearchChanged(const QString& text) {
         clearGameCards();
         if (m_currentMode == AppMode::LuaPatcher) {
             displayRandomGames();
+        } else if (m_currentMode == AppMode::Library) {
+            displayLibrary();
         } else {
             populateFixList();
         }
@@ -372,6 +461,21 @@ void MainWindow::doSearch() {
     for (const auto& game : m_supportedGames) {
         if (count >= 100) break;
         if (m_currentMode == AppMode::FixManager && !game.hasFix) continue;
+        // In Library mode with active search, we only want to search within installed games? 
+        // Or global search? Let's assume global search for now, but strictly speaking 
+        // if user is in Library tab they might expect to search ONLY library. 
+        // The current implementation of doSearch creates localResults from ALL supported games.
+        // We should filter if mode is Library?
+        // Actually, let's keep it consistent: doSearch searches everything. 
+        // But wait, if I'm in Library tab and search "Cyberpunk", if I don't have it installed, 
+        // should it show up? Probably not if it's "Library" search.
+        // However, the current doSearch logic is "Global Search" effectively.
+        // Let's leave doSearch as is for now (searching all supported games), or modify it?
+        // Modifying doSearch to respect Library mode:
+        if (m_currentMode == AppMode::Library) {
+             // Logic for library search if needed
+        }
+        
         if (game.name.contains(query, Qt::CaseInsensitive) || game.id == query) {
             QJsonObject item;
             item["id"] = game.id;
@@ -618,7 +722,6 @@ void MainWindow::onCardClicked(GameCard* card) {
         m_selectedCard = nullptr;
         m_selectedGame.clear();
         m_btnAddToLibrary->setEnabled(false);
-        m_btnApplyFix->hide();
         m_statusLabel->setText("Ready");
         return;
     }
@@ -632,11 +735,7 @@ void MainWindow::onCardClicked(GameCard* card) {
     bool isSupported = (data["supported"] == "true");
     
     if (m_currentMode == AppMode::LuaPatcher) {
-        m_btnApplyFix->hide();
-        m_btnAddToLibrary->show();
         m_btnAddToLibrary->setEnabled(true);
-        m_btnAddToLibrary->setText("Add to Library");
-        
         if (isSupported) {
             m_btnAddToLibrary->setDescription(QString("Install patch for %1").arg(data["name"]));
             m_btnAddToLibrary->setColor(Colors::ACCENT_GREEN);
@@ -644,26 +743,55 @@ void MainWindow::onCardClicked(GameCard* card) {
             m_btnAddToLibrary->setDescription(QString("Generate patch for %1").arg(data["name"]));
             m_btnAddToLibrary->setColor(Colors::ACCENT_BLUE);
         }
-        m_statusLabel->setText(QString("Selected: %1").arg(data["name"]));
     } else if (m_currentMode == AppMode::FixManager) {
-        m_btnAddToLibrary->hide();
         if (hasFix) {
             m_btnApplyFix->setEnabled(true);
-            m_btnApplyFix->show();
             m_btnApplyFix->setDescription(QString("Apply fix for %1").arg(data["name"]));
-            m_statusLabel->setText(QString("Selected: %1").arg(data["name"]));
         } else {
-            m_btnApplyFix->hide();
-            m_statusLabel->setText("No fix available for this game");
+            m_btnApplyFix->setEnabled(false);
         }
+    } else if (m_currentMode == AppMode::Library) {
+        m_btnRemove->setEnabled(true);
+        m_btnRemove->setDescription(QString("Remove %1 from Library").arg(data["name"]));
     }
+    m_statusLabel->setText(QString("Selected: %1").arg(data["name"]));
 }
 
 // ---- Patch / Generate / Restart / Fix ----
+// ---- Patch / Generate / Restart / Fix / Remove ----
 void MainWindow::doAddGame() {
     if (m_selectedGame.isEmpty()) return;
+    // Only works in LuaPatcher mode really, or if called directly
     bool isSupported = (m_selectedGame["supported"] == "true");
     if (isSupported) runPatchLogic(); else runGenerateLogic();
+}
+
+void MainWindow::doRemoveGame() {
+    if (m_selectedGame.isEmpty()) return;
+    QString appId = m_selectedGame["appid"];
+    QString name = m_selectedGame["name"];
+    
+    if (QMessageBox::question(this, "Remove Patch", 
+        QString("Are you sure you want to remove the patch for %1?\nThis will delete the lua file from your Steam plugin folder.").arg(name),
+        QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes) return;
+        
+    QStringList pluginDirs = Config::getAllSteamPluginDirs();
+    bool deleted = false;
+    
+    for (const QString& dirPath : pluginDirs) {
+        QDir dir(dirPath);
+        QString filePath = dir.filePath(appId + ".lua");
+        if (QFile::exists(filePath)) {
+            if (QFile::remove(filePath)) deleted = true;
+        }
+    }
+    
+    if (deleted) {
+        m_statusLabel->setText(QString("Removed patch for %1").arg(name));
+        displayLibrary(); // Refresh view
+    } else {
+        QMessageBox::warning(this, "Error", "Failed to remove patch file. It may not exist or is in use.");
+    }
 }
 
 void MainWindow::runPatchLogic() {
@@ -817,10 +945,26 @@ void MainWindow::switchMode(AppMode mode) {
     if (m_currentMode == mode) return;
     m_currentMode = mode;
     updateModeUI();
+    
+    // Toggle button visibility
+    m_btnAddToLibrary->hide();
+    m_btnApplyFix->hide();
+    m_btnRemove->hide();
+    
+    if (m_currentMode == AppMode::LuaPatcher) {
+        m_btnAddToLibrary->show();
+    } else if (m_currentMode == AppMode::FixManager) {
+        m_btnApplyFix->show();
+    } else if (m_currentMode == AppMode::Library) {
+        m_btnRemove->show();
+    }
+    
     onCardClicked(nullptr);
     clearGameCards();
     if (m_currentMode == AppMode::FixManager) {
         populateFixList();
+    } else if (m_currentMode == AppMode::Library) {
+        displayLibrary();
     } else {
         if (m_searchInput->text().trimmed().isEmpty()) {
             displayRandomGames();
@@ -863,6 +1007,7 @@ void MainWindow::populateFixList() {
 void MainWindow::updateModeUI() {
     m_tabLua->setActive(m_currentMode == AppMode::LuaPatcher);
     m_tabFix->setActive(m_currentMode == AppMode::FixManager);
+    m_tabLibrary->setActive(m_currentMode == AppMode::Library);
     m_stack->setCurrentIndex(1);
 }
 

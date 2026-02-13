@@ -36,7 +36,8 @@ class MainWindow : public QMainWindow {
 public:
     enum class AppMode {
         LuaPatcher,
-        FixManager
+        FixManager,
+        Library
     };
 
     explicit MainWindow(QWidget* parent = nullptr);
@@ -61,6 +62,7 @@ private slots:
     void onPatchError(QString error);
     void doRestart();
     void doApplyFix();
+    void doRemoveGame();
     void switchMode(AppMode mode);
     void updateModeUI();
     void processNextNameFetch();
@@ -75,6 +77,7 @@ private:
     void cancelNameFetches();
     void clearGameCards();
     void displayRandomGames();
+    void displayLibrary();
 
     // UI Components
     QLabel* m_statusLabel;
@@ -93,10 +96,12 @@ private:
     // Header & Tabs
     GlassButton* m_tabLua;
     GlassButton* m_tabFix;
+    GlassButton* m_tabLibrary;
     AppMode m_currentMode;
 
     GlassButton* m_btnAddToLibrary;
     GlassButton* m_btnApplyFix;
+    GlassButton* m_btnRemove;
     GlassButton* m_btnRestart;
     TerminalDialog* m_terminalDialog;
 
