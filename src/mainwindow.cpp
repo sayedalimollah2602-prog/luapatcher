@@ -31,6 +31,54 @@
 #include <QRandomGenerator>
 #include <algorithm>
 
+// ── Inline helper: a QWidget that paints a single Material icon ──
+class MaterialIconWidget : public QWidget {
+public:
+    MaterialIconWidget(MaterialIcons::Icon icon, const QColor& color, int size = 24, QWidget* parent = nullptr)
+        : QWidget(parent), m_icon(icon), m_color(color) {
+        setFixedSize(size, size);
+        setAttribute(Qt::WA_TranslucentBackground);
+    }
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        QRectF r(4, 4, width() - 8, height() - 8);
+        MaterialIcons::draw(p, r, m_color, m_icon);
+    }
+private:
+    MaterialIcons::Icon m_icon;
+    QColor m_color;
+};
+
+// ── Inline helper: a QPushButton that paints a Material icon ──
+class MaterialIconButton : public QPushButton {
+public:
+    MaterialIconButton(MaterialIcons::Icon icon, const QColor& color, int size = 40, QWidget* parent = nullptr)
+        : QPushButton(parent), m_icon(icon), m_color(color) {
+        setFixedSize(size, size);
+        setCursor(Qt::PointingHandCursor);
+    }
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        // Background
+        QColor bg = Colors::toQColor(Colors::SURFACE_CONTAINER_HIGH);
+        if (underMouse()) bg = Colors::toQColor(Colors::SURFACE_CONTAINER_HIGHEST);
+        QPainterPath path;
+        path.addRoundedRect(QRectF(rect()), width() / 2.0, height() / 2.0);
+        p.fillPath(path, bg);
+        // Icon
+        int pad = 10;
+        QRectF iconRect(pad, pad, width() - 2 * pad, height() - 2 * pad);
+        MaterialIcons::draw(p, iconRect, m_color, m_icon);
+    }
+private:
+    MaterialIcons::Icon m_icon;
+    QColor m_color;
+};
+
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
     , m_currentMode(AppMode::LuaPatcher)
@@ -91,35 +139,51 @@ void MainWindow::initUI() {
     
     // ──── Material Navigation Rail (Sidebar) ────
     QWidget* sidebarWidget = new QWidget();
-    sidebarWidget->setFixedWidth(220);
+    sidebarWidget->setFixedWidth(230);
     sidebarWidget->setStyleSheet(QString(
         "background-color: %1; border-right: 1px solid %2;"
     ).arg(Colors::SURFACE_CONTAINER).arg(Colors::OUTLINE_VARIANT));
     
     QVBoxLayout* sidebarLayout = new QVBoxLayout(sidebarWidget);
-    sidebarLayout->setContentsMargins(16, 28, 16, 20);
-    sidebarLayout->setSpacing(12);
+    sidebarLayout->setContentsMargins(16, 24, 16, 16);
+    sidebarLayout->setSpacing(8);
     
-    // App header with Material icon
+    // ── App header with actual logo ──
     QHBoxLayout* headerLayout = new QHBoxLayout();
-    headerLayout->setSpacing(10);
+    headerLayout->setSpacing(12);
     
-    // App icon as a Material widget
-    QWidget* appIconWidget = new QWidget();
-    appIconWidget->setFixedSize(32, 32);
-    appIconWidget->setStyleSheet(QString(
-        "background: %1; border-radius: 8px; border: none;"
-    ).arg(Colors::PRIMARY_CONTAINER));
-    headerLayout->addWidget(appIconWidget);
+    QLabel* appIconLabel = new QLabel();
+    appIconLabel->setFixedSize(36, 36);
+    QString iconPath = Paths::getResourcePath("logo.ico");
+    if (QFile::exists(iconPath)) {
+        QPixmap logoPixmap(iconPath);
+        appIconLabel->setPixmap(logoPixmap.scaled(36, 36, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    } else {
+        // Fallback: draw a Material Flash icon
+        appIconLabel->setStyleSheet(QString(
+            "background: %1; border-radius: 10px; border: none;"
+        ).arg(Colors::PRIMARY_CONTAINER));
+    }
+    appIconLabel->setStyleSheet(appIconLabel->styleSheet() + " border: none; background: transparent;");
+    headerLayout->addWidget(appIconLabel);
     
     QLabel* title = new QLabel("Lua Patcher");
     title->setStyleSheet(QString(
-        "font-size: 16px; font-weight: 700; color: %1; background: transparent; border: none; font-family: 'Roboto', 'Segoe UI';"
+        "font-size: 17px; font-weight: 700; color: %1; background: transparent; border: none; font-family: 'Roboto', 'Segoe UI';"
     ).arg(Colors::ON_SURFACE));
     headerLayout->addWidget(title);
     headerLayout->addStretch();
     sidebarLayout->addLayout(headerLayout);
-    sidebarLayout->addSpacing(16);
+    sidebarLayout->addSpacing(20);
+    
+    // ── Section label ──
+    QLabel* navLabel = new QLabel("NAVIGATION");
+    navLabel->setStyleSheet(QString(
+        "font-size: 10px; font-weight: 600; color: %1; letter-spacing: 1px;"
+        " background: transparent; border: none; padding-left: 4px; font-family: 'Roboto', 'Segoe UI';"
+    ).arg(Colors::OUTLINE));
+    sidebarLayout->addWidget(navLabel);
+    sidebarLayout->addSpacing(4);
     
     // Navigation tabs
     m_tabLua = new GlassButton(MaterialIcons::Download, " Lua Patcher", "", Colors::PRIMARY);
@@ -145,7 +209,7 @@ void MainWindow::initUI() {
     line->setFixedHeight(1);
     line->setStyleSheet(QString("background: %1; border: none;").arg(Colors::OUTLINE_VARIANT));
     sidebarLayout->addWidget(line);
-    sidebarLayout->addSpacing(8);
+    sidebarLayout->addSpacing(4);
     
     m_statusLabel = new QLabel("Initializing...");
     m_statusLabel->setStyleSheet(QString(
@@ -154,6 +218,15 @@ void MainWindow::initUI() {
     m_statusLabel->setWordWrap(true);
     sidebarLayout->addWidget(m_statusLabel);
     sidebarLayout->addStretch();
+    
+    // ── Section label for actions ──
+    QLabel* actionsLabel = new QLabel("ACTIONS");
+    actionsLabel->setStyleSheet(QString(
+        "font-size: 10px; font-weight: 600; color: %1; letter-spacing: 1px;"
+        " background: transparent; border: none; padding-left: 4px; font-family: 'Roboto', 'Segoe UI';"
+    ).arg(Colors::OUTLINE));
+    sidebarLayout->addWidget(actionsLabel);
+    sidebarLayout->addSpacing(4);
     
     // Action buttons
     m_btnAddToLibrary = new GlassButton(MaterialIcons::Add, "Add to Library", "Install / Generate Patch", Colors::ACCENT_GREEN);
@@ -176,12 +249,20 @@ void MainWindow::initUI() {
     connect(m_btnRemove, &QPushButton::clicked, this, &MainWindow::doRemoveGame);
     sidebarLayout->addWidget(m_btnRemove);
     
-    sidebarLayout->addSpacing(8);
+    sidebarLayout->addSpacing(6);
     m_btnRestart = new GlassButton(MaterialIcons::RestartAlt, "Restart Steam", "Apply Changes", Colors::PRIMARY);
     m_btnRestart->setFixedHeight(52);
     connect(m_btnRestart, &QPushButton::clicked, this, &MainWindow::doRestart);
     sidebarLayout->addWidget(m_btnRestart);
-    sidebarLayout->addSpacing(16);
+    sidebarLayout->addSpacing(12);
+    
+    // Divider before version info
+    QFrame* line2 = new QFrame();
+    line2->setFrameShape(QFrame::HLine);
+    line2->setFixedHeight(1);
+    line2->setStyleSheet(QString("background: %1; border: none;").arg(Colors::OUTLINE_VARIANT));
+    sidebarLayout->addWidget(line2);
+    sidebarLayout->addSpacing(8);
     
     QLabel* infoLabel = new QLabel(QString("v%1<br>by <a href=\"https://github.com/sayedalimollah2602-prog\" style=\"color: %2; text-decoration: none;\">leVI</a> & <a href=\"https://github.com/raxnmint\" style=\"color: %2; text-decoration: none;\">raxnmint</a>").arg(Config::APP_VERSION).arg(Colors::ON_SURFACE_VARIANT));
     infoLabel->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; font-family: 'Roboto', 'Segoe UI'; background: transparent; border: none;").arg(Colors::ON_SURFACE_VARIANT));
@@ -194,45 +275,46 @@ void MainWindow::initUI() {
 
     // ──── Content Area ────
     QWidget* contentWidget = new QWidget();
-    contentWidget->setStyleSheet(QString("background: %1;").arg(Colors::SURFACE));
+    contentWidget->setStyleSheet(QString("background: %1;").arg(Colors::SURFACE_DIM));
     QVBoxLayout* mainLayout = new QVBoxLayout(contentWidget);
-    mainLayout->setContentsMargins(24, 24, 24, 24);
+    mainLayout->setContentsMargins(20, 20, 20, 20);
     mainLayout->setSpacing(16);
     
-    // Material search bar (outlined text field style)
-    QHBoxLayout* searchLayout = new QHBoxLayout();
-    searchLayout->setSpacing(10);
+    // ── Search bar container (Material surface card) ──
+    QWidget* searchContainer = new QWidget();
+    searchContainer->setStyleSheet(QString(
+        "background: %1; border-radius: 16px; border: 1px solid %2;"
+    ).arg(Colors::SURFACE_CONTAINER).arg(Colors::OUTLINE_VARIANT));
+    searchContainer->setFixedHeight(64);
+    QHBoxLayout* searchLayout = new QHBoxLayout(searchContainer);
+    searchLayout->setContentsMargins(8, 8, 8, 8);
+    searchLayout->setSpacing(8);
+    
+    // Search icon
+    MaterialIconWidget* searchIconWidget = new MaterialIconWidget(
+        MaterialIcons::Search, Colors::toQColor(Colors::ON_SURFACE_VARIANT), 40);
+    searchLayout->addWidget(searchIconWidget);
+    
     m_searchInput = new QLineEdit();
     m_searchInput->setPlaceholderText("Search games...");
-    m_searchInput->setMinimumHeight(44);
+    m_searchInput->setMinimumHeight(40);
+    m_searchInput->setStyleSheet(QString(
+        "QLineEdit { background: transparent; border: none; border-radius: 0px;"
+        " font-size: 15px; color: %1; padding: 0px 4px; }"
+        "QLineEdit:focus { border: none; background: transparent; }"
+    ).arg(Colors::ON_SURFACE));
     connect(m_searchInput, &QLineEdit::textChanged, this, &MainWindow::onSearchChanged);
-    
-    // Subtle shadow for elevation
-    QGraphicsDropShadowEffect* shadow = new QGraphicsDropShadowEffect(m_searchInput);
-    shadow->setBlurRadius(12);
-    shadow->setColor(QColor(0, 0, 0, 40));
-    shadow->setOffset(0, 2);
-    m_searchInput->setGraphicsEffect(shadow);
     searchLayout->addWidget(m_searchInput);
     
-    // Refresh button - Material icon button
-    QPushButton* refreshBtn = new QPushButton();
-    refreshBtn->setFixedSize(44, 44);
-    refreshBtn->setCursor(Qt::PointingHandCursor);
-    refreshBtn->setStyleSheet(QString(
-        "QPushButton { background: %1; border: 1px solid %2; border-radius: 22px; }"
-        "QPushButton:hover { background: %3; border-color: %4; }"
-        "QPushButton:pressed { background: %5; }"
-    ).arg(Colors::SURFACE_CONTAINER_HIGH).arg(Colors::OUTLINE_VARIANT)
-     .arg(Colors::SURFACE_CONTAINER_HIGHEST).arg(Colors::PRIMARY)
-     .arg(Colors::SURFACE_CONTAINER));
-    
-    // Custom paint for refresh icon on button
+    // Refresh button with Material icon
+    MaterialIconButton* refreshBtn = new MaterialIconButton(
+        MaterialIcons::Refresh, Colors::toQColor(Colors::ON_SURFACE_VARIANT), 40);
     connect(refreshBtn, &QPushButton::clicked, this, [this]() {
         if (m_searchInput->text().trimmed().isEmpty()) startSync(); else doSearch();
     });
     searchLayout->addWidget(refreshBtn);
-    mainLayout->addLayout(searchLayout);
+    
+    mainLayout->addWidget(searchContainer);
     
     // Stacked widget: page 0 = loading, page 1 = grid
     m_stack = new QStackedWidget();
