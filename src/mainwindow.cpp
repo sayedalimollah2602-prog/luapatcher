@@ -30,6 +30,9 @@
 #include <QScrollBar>
 #include <QRandomGenerator>
 #include <algorithm>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
 
 // ── Inline helper: a QWidget that paints a single Material icon ──
 class MaterialIconWidget : public QWidget {
@@ -95,6 +98,7 @@ MainWindow::MainWindow(QWidget* parent)
     setWindowTitle("Steam Lua Patcher");
     setMinimumSize(900, 600);
     resize(900, 600);
+    setAcceptDrops(true);
     
     QString iconPath = Paths::getResourcePath("logo.ico");
     if (QFile::exists(iconPath)) {
@@ -125,8 +129,58 @@ MainWindow::~MainWindow() {
 void MainWindow::paintEvent(QPaintEvent* event) {
     Q_UNUSED(event);
     QPainter painter(this);
-    // Material Design 3: Solid surface color (no gradient)
     painter.fillRect(rect(), Colors::toQColor(Colors::SURFACE));
+}
+
+void MainWindow::dragEnterEvent(QDragEnterEvent* event) {
+    if (event->mimeData()->hasUrls()) {
+        QList<QUrl> urls = event->mimeData()->urls();
+        for (const QUrl& url : urls) {
+            if (url.isLocalFile() && url.toLocalFile().endsWith(".lua", Qt::CaseInsensitive)) {
+                event->acceptProposedAction();
+                return;
+            }
+        }
+    }
+}
+
+void MainWindow::dropEvent(QDropEvent* event) {
+    QList<QUrl> urls = event->mimeData()->urls();
+    if (urls.isEmpty()) return;
+
+    QString pluginDir = Config::getSteamPluginDir();
+    QDir dir(pluginDir);
+    if (!dir.exists()) dir.mkpath(".");
+
+    int count = 0;
+    QString lastFile;
+
+    for (const QUrl& url : urls) {
+        if (url.isLocalFile()) {
+            QString srcPath = url.toLocalFile();
+            if (srcPath.endsWith(".lua", Qt::CaseInsensitive)) {
+                QString fileName = QFileInfo(srcPath).fileName();
+                QString destPath = dir.filePath(fileName);
+                
+                QFile::remove(destPath); // Overwrite
+                if (QFile::copy(srcPath, destPath)) {
+                    count++;
+                    lastFile = fileName;
+                }
+            }
+        }
+    }
+
+    if (count > 0) {
+        m_statusLabel->setText(QString("Installed %1 patch%2").arg(count).arg(count > 1 ? "es" : ""));
+        if (m_currentMode == AppMode::Library) {
+            displayLibrary();
+        } else {
+            // Switch to library to show the new patch
+            m_tabLibrary->animateClick();
+        }
+        event->acceptProposedAction();
+    }
 }
 
 void MainWindow::initUI() {

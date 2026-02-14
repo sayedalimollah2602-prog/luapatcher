@@ -45,6 +45,8 @@ public:
 
 protected:
     void paintEvent(QPaintEvent* event) override;
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
 
 private slots:
     void onSyncDone(QList<GameInfo> games);

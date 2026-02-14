@@ -121,12 +121,12 @@ void GameCard::paintEvent(QPaintEvent* event) {
     QLinearGradient infoGrad(infoRect.topLeft(), infoRect.bottomLeft());
     if (m_hasThumbnail) {
         infoGrad.setColorAt(0, QColor(0, 0, 0, 0));
-        infoGrad.setColorAt(0.3, QColor(28, 27, 31, 180));
-        infoGrad.setColorAt(1, QColor(28, 27, 31, 240));
+        infoGrad.setColorAt(0.3, QColor(0, 0, 0, 180));
+        infoGrad.setColorAt(1, QColor(0, 0, 0, 240));
     } else {
         infoGrad.setColorAt(0, QColor(0, 0, 0, 0));
-        infoGrad.setColorAt(0.3, QColor(20, 18, 24, 120));
-        infoGrad.setColorAt(1, QColor(20, 18, 24, 180));
+        infoGrad.setColorAt(0.3, QColor(0, 0, 0, 120));
+        infoGrad.setColorAt(1, QColor(0, 0, 0, 180));
     }
     painter.fillRect(infoRect.toRect(), infoGrad);
 

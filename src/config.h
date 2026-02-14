@@ -7,7 +7,7 @@
 #include <QFileInfo>
 
 namespace Config {
-    const QString APP_VERSION = "1.3.5";
+    const QString APP_VERSION = "1.3.6";
     const QString WEBSERVER_BASE_URL = "https://webserver-ecru.vercel.app";
     
     // Server access token - check local file first, then macro
@@ -62,11 +62,7 @@ namespace Config {
         return paths;
     }
     
-    inline QString getSteamPluginDir() {
-        QStringList paths = getAllSteamPluginDirs();
-        return paths.isEmpty() ? "C:/Program Files (x86)/Steam/config/stplug-in" : paths.first();
-    }
-    
+
     inline QStringList getAllSteamExePaths() {
         QStringList paths;
         
@@ -89,6 +85,21 @@ namespace Config {
         }
         
         return paths;
+    }
+
+    inline QString getSteamPluginDir() {
+        QStringList paths = getAllSteamPluginDirs();
+        if (!paths.isEmpty()) return paths.first();
+        
+        // Fallback: try to find generic Steam dir
+        QStringList exePaths = getAllSteamExePaths();
+        if (!exePaths.isEmpty()) {
+             QFileInfo fi(exePaths.first());
+             QString configDir = fi.absoluteDir().filePath("config");
+             QDir(configDir).mkpath("stplug-in");
+             return configDir + "/stplug-in";
+        }
+        return "C:/Program Files (x86)/Steam/config/stplug-in";
     }
     
     inline QString getSteamExePath() {
