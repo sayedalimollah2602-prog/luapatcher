@@ -10,90 +10,91 @@ TerminalDialog::TerminalDialog(QWidget* parent)
     setFixedSize(600, 400);
     setModal(true);
     
-    // Main layout
     QVBoxLayout* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(16, 16, 16, 16);
-    layout->setSpacing(12);
+    layout->setContentsMargins(20, 20, 20, 20);
+    layout->setSpacing(14);
     
-    // Terminal-like log view
+    // Terminal log view - Material surface styling
     m_logView = new QTextEdit(this);
     m_logView->setReadOnly(true);
     m_logView->setFont(QFont("Consolas, Monaco, monospace", 10));
     m_logView->setStyleSheet(QString(
         "QTextEdit {"
-        "    background-color: #0D1117;"
-        "    color: #C9D1D9;"
-        "    border: 1px solid %1;"
-        "    border-radius: 8px;"
-        "    padding: 12px;"
-        "    selection-background-color: #388BFD;"
+        "    background-color: %1;"
+        "    color: %2;"
+        "    border: 1px solid %3;"
+        "    border-radius: 16px;"
+        "    padding: 14px;"
+        "    selection-background-color: %4;"
         "}"
         "QScrollBar:vertical {"
-        "    background: #161B22;"
-        "    width: 10px;"
-        "    border-radius: 5px;"
+        "    background: %5;"
+        "    width: 8px;"
+        "    border-radius: 4px;"
         "}"
         "QScrollBar::handle:vertical {"
-        "    background: #30363D;"
-        "    border-radius: 5px;"
+        "    background: %3;"
+        "    border-radius: 4px;"
         "    min-height: 20px;"
         "}"
         "QScrollBar::handle:vertical:hover {"
-        "    background: #484F58;"
+        "    background: %6;"
         "}"
         "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {"
         "    height: 0px;"
         "}"
-    ).arg(Colors::GLASS_BORDER));
+    ).arg(Colors::SURFACE_CONTAINER)
+     .arg(Colors::ON_SURFACE)
+     .arg(Colors::OUTLINE_VARIANT)
+     .arg(Colors::PRIMARY)
+     .arg(Colors::SURFACE)
+     .arg(Colors::OUTLINE));
     
-    // Add shadow effect
     QGraphicsDropShadowEffect* shadow = new QGraphicsDropShadowEffect(m_logView);
-    shadow->setBlurRadius(15);
-    shadow->setColor(QColor(0, 0, 0, 100));
-    shadow->setOffset(0, 4);
+    shadow->setBlurRadius(12);
+    shadow->setColor(QColor(0, 0, 0, 60));
+    shadow->setOffset(0, 2);
     m_logView->setGraphicsEffect(shadow);
     
     layout->addWidget(m_logView);
     
-    // Close button (hidden until operation completes)
+    // Close button - Material filled button
     m_closeBtn = new QPushButton("Close", this);
-    m_closeBtn->setFixedHeight(40);
+    m_closeBtn->setFixedHeight(44);
     m_closeBtn->setCursor(Qt::PointingHandCursor);
     m_closeBtn->setStyleSheet(QString(
         "QPushButton {"
         "    background: %1;"
         "    border: 1px solid %2;"
-        "    border-radius: 8px;"
+        "    border-radius: 22px;"
         "    font-size: 14px;"
         "    font-weight: bold;"
         "    color: %3;"
+        "    font-family: 'Roboto', 'Segoe UI';"
         "}"
         "QPushButton:hover {"
         "    background: %4;"
         "    border-color: %5;"
         "}"
         "QPushButton:pressed {"
-        "    background: %6;"
+        "    background: %1;"
         "}")
-        .arg(Colors::GLASS_BG)
-        .arg(Colors::GLASS_BORDER)
-        .arg(Colors::TEXT_PRIMARY)
-        .arg(Colors::GLASS_HOVER)
-        .arg(Colors::ACCENT_BLUE)
-        .arg(Colors::GLASS_BG));
+        .arg(Colors::SURFACE_CONTAINER_HIGH)
+        .arg(Colors::OUTLINE_VARIANT)
+        .arg(Colors::ON_SURFACE)
+        .arg(Colors::SURFACE_CONTAINER_HIGHEST)
+        .arg(Colors::PRIMARY));
     m_closeBtn->hide();
     connect(m_closeBtn, &QPushButton::clicked, this, &QDialog::accept);
     layout->addWidget(m_closeBtn);
     
-    // Dialog styling
+    // Material surface dialog background
     setStyleSheet(QString(
         "QDialog {"
-        "    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-        "        stop:0 %1, stop:1 %2);"
-        "    border-radius: 12px;"
+        "    background: %1;"
+        "    border-radius: 28px;"
         "}")
-        .arg(Colors::BG_GRADIENT_START)
-        .arg(Colors::BG_GRADIENT_END));
+        .arg(Colors::SURFACE_CONTAINER_HIGH));
 }
 
 void TerminalDialog::appendLog(const QString& message, const QString& level) {
@@ -101,22 +102,23 @@ void TerminalDialog::appendLog(const QString& message, const QString& level) {
     QString color;
     
     if (level == "INFO") {
-        color = "#58A6FF";  // Blue
+        color = Colors::PRIMARY;        // Material primary
     } else if (level == "SUCCESS") {
-        color = "#3FB950";  // Green
+        color = Colors::ACCENT_GREEN;   // Green
     } else if (level == "ERROR") {
-        color = "#F85149";  // Red
+        color = Colors::ERROR;          // Material error
     } else if (level == "WARN") {
-        color = "#D29922";  // Yellow/Orange
+        color = Colors::TERTIARY;       // Material tertiary (pink/warm)
     } else {
-        color = "#8B949E";  // Gray
+        color = Colors::OUTLINE;        // Neutral
     }
     
     QString html = QString(
-        "<span style='color: #484F58;'>[%1]</span> "
-        "<span style='color: %2; font-weight: bold;'>[%3]</span> "
-        "<span style='color: #C9D1D9;'>%4</span><br>"
-    ).arg(timestamp).arg(color).arg(level).arg(message.toHtmlEscaped());
+        "<span style='color: %1;'>[%2]</span> "
+        "<span style='color: %3; font-weight: bold;'>[%4]</span> "
+        "<span style='color: %5;'>%6</span><br>"
+    ).arg(Colors::OUTLINE).arg(timestamp).arg(color).arg(level)
+     .arg(Colors::ON_SURFACE).arg(message.toHtmlEscaped());
     
     m_logView->insertHtml(html);
     m_logView->ensureCursorVisible();
@@ -129,39 +131,45 @@ void TerminalDialog::clear() {
 
 void TerminalDialog::setFinished(bool success) {
     if (success) {
-        m_closeBtn->setText("✓ Close");
+        m_closeBtn->setText("Done");
         m_closeBtn->setStyleSheet(QString(
             "QPushButton {"
             "    background: %1;"
-            "    border: 1px solid %1;"
-            "    border-radius: 8px;"
+            "    border: none;"
+            "    border-radius: 22px;"
             "    font-size: 14px;"
             "    font-weight: bold;"
-            "    color: white;"
+            "    color: #FFFFFF;"
+            "    font-family: 'Roboto', 'Segoe UI';"
             "}"
             "QPushButton:hover {"
-            "    background: #2EA043;"
+            "    background: %2;"
             "}"
             "QPushButton:pressed {"
-            "    background: #238636;"
-            "}").arg(Colors::ACCENT_GREEN));
+            "    background: %3;"
+            "}").arg(Colors::ACCENT_GREEN)
+                .arg("#7BC06B") // lighter green
+                .arg("#5A9E4D")); // darker green
     } else {
-        m_closeBtn->setText("✕ Close");
+        m_closeBtn->setText("Close");
         m_closeBtn->setStyleSheet(QString(
             "QPushButton {"
             "    background: %1;"
-            "    border: 1px solid %1;"
-            "    border-radius: 8px;"
+            "    border: none;"
+            "    border-radius: 22px;"
             "    font-size: 14px;"
             "    font-weight: bold;"
-            "    color: white;"
+            "    color: #FFFFFF;"
+            "    font-family: 'Roboto', 'Segoe UI';"
             "}"
             "QPushButton:hover {"
-            "    background: #DA3633;"
+            "    background: %2;"
             "}"
             "QPushButton:pressed {"
-            "    background: #B62324;"
-            "}").arg(Colors::ACCENT_RED));
+            "    background: %3;"
+            "}").arg(Colors::ERROR_CONTAINER)
+                .arg("#A12424")
+                .arg("#7A1A1A"));
     }
     m_closeBtn->show();
 }

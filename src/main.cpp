@@ -6,12 +6,12 @@
 QString getStyleSheet() {
     return QString(R"(
 QMainWindow {
-    background: transparent;
+    background: %1;
 }
 
 QWidget {
-    font-family: 'Segoe UI', sans-serif;
-    color: %1;
+    font-family: 'Roboto', 'Segoe UI', sans-serif;
+    color: %2;
 }
 
 /* Scrollbar */
@@ -21,12 +21,12 @@ QScrollBar:vertical {
     margin: 0px;
 }
 QScrollBar::handle:vertical {
-    background-color: %2;
+    background-color: %3;
     border-radius: 3px;
     min-height: 20px;
 }
 QScrollBar::handle:vertical:hover {
-    background-color: %3;
+    background-color: %4;
 }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
     height: 0px;
@@ -42,60 +42,84 @@ QListWidget {
     outline: none;
 }
 QListWidget::item {
-    background-color: %4;
-    border: 1px solid %2;
-    border-radius: 12px;
+    background-color: %5;
+    border: 1px solid %3;
+    border-radius: 16px;
     padding: 12px;
     margin-bottom: 8px;
-    color: %1;
+    color: %2;
     word-wrap: break-word;
 }
 QListWidget::item:hover {
-    background-color: %5;
-    border: 1px solid %6;
+    background-color: %6;
+    border: 1px solid %4;
 }
 QListWidget::item:selected {
     background-color: %7;
-    border: 1px solid %3;
+    border: 1px solid %8;
 }
 
-/* Inputs */
+/* Inputs - Material Outlined Text Field */
 QLineEdit {
-    background-color: %4;
-    border: 1px solid %2;
-    border-radius: 12px;
-    padding: 14px 16px;
+    background-color: %5;
+    border: 1px solid %3;
+    border-radius: 28px;
+    padding: 12px 20px;
     font-size: 14px;
-    selection-background-color: %3;
-    color: %1;
+    selection-background-color: %8;
+    color: %2;
 }
 QLineEdit:focus {
-    border: 1px solid %3;
-    background-color: %5;
+    border: 2px solid %8;
+    background-color: %6;
+}
+QLineEdit::placeholder {
+    color: %4;
 }
 
-/* MessageBox */
+/* MessageBox - Material Dialog */
 QMessageBox {
-    background-color: #1e293b;
+    background-color: %9;
+    border-radius: 28px;
 }
 QMessageBox QLabel {
-    color: %1;
+    color: %2;
+    font-family: 'Roboto', 'Segoe UI', sans-serif;
 }
 QMessageBox QPushButton {
-    background-color: %3;
-    color: white;
-    border-radius: 6px;
-    padding: 6px 16px;
+    background-color: %8;
+    color: %10;
+    border-radius: 20px;
+    padding: 8px 24px;
     border: none;
+    font-weight: bold;
+    font-family: 'Roboto', 'Segoe UI', sans-serif;
+}
+QMessageBox QPushButton:hover {
+    background-color: %11;
+}
+
+/* ToolTip */
+QToolTip {
+    background-color: %9;
+    color: %2;
+    border: 1px solid %3;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-family: 'Roboto', 'Segoe UI', sans-serif;
 }
 )")
-    .arg(Colors::TEXT_PRIMARY)       // %1
-    .arg(Colors::GLASS_BORDER)       // %2
-    .arg(Colors::ACCENT_BLUE)        // %3
-    .arg(Colors::GLASS_BG)           // %4
-    .arg(Colors::GLASS_HOVER)        // %5
-    .arg(Colors::ACCENT_BLUE + "80") // %6
-    .arg(Colors::ACCENT_BLUE + "20"); // %7
+    .arg(Colors::SURFACE)                // %1  background
+    .arg(Colors::ON_SURFACE)             // %2  text
+    .arg(Colors::OUTLINE_VARIANT)        // %3  border/scrollbar
+    .arg(Colors::OUTLINE)                // %4  hover border/scrollbar
+    .arg(Colors::SURFACE_CONTAINER)      // %5  input/list bg
+    .arg(Colors::SURFACE_CONTAINER_HIGH) // %6  hover bg
+    .arg(Colors::SURFACE_CONTAINER_HIGHEST) // %7  selected bg
+    .arg(Colors::PRIMARY)                // %8  primary accent
+    .arg(Colors::SURFACE_CONTAINER_HIGH) // %9  dialog bg
+    .arg(Colors::ON_PRIMARY)             // %10 on-primary text
+    .arg(Colors::PRIMARY_CONTAINER);     // %11 primary hover
 }
 
 int main(int argc, char *argv[]) {
@@ -104,12 +128,17 @@ int main(int argc, char *argv[]) {
     app.setStyle("Fusion");
     app.setStyleSheet(getStyleSheet());
     
-    // Set global font
-    QFont font = app.font();
+    // Material Design font: Roboto (fallback Segoe UI)
+    QFont font("Roboto");
+    if (!QFontInfo(font).exactMatch()) {
 #ifdef Q_OS_WIN
-    font.setFamily("Segoe UI");
+        font.setFamily("Segoe UI");
+#else
+        font.setFamily("sans-serif");
 #endif
+    }
     font.setPointSize(10);
+    font.setStyleStrategy(QFont::PreferAntialias);
     app.setFont(font);
     
     MainWindow window;

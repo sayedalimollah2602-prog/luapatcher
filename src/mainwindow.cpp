@@ -2,6 +2,7 @@
 #include "glassbutton.h"
 #include "gamecard.h"
 #include "loadingspinner.h"
+#include "materialicons.h"
 #include "workers/indexdownloadworker.h"
 #include "workers/luadownloadworker.h"
 #include "workers/generatorworker.h"
@@ -76,10 +77,8 @@ MainWindow::~MainWindow() {
 void MainWindow::paintEvent(QPaintEvent* event) {
     Q_UNUSED(event);
     QPainter painter(this);
-    QLinearGradient grad(0, 0, 0, height());
-    grad.setColorAt(0, Colors::toQColor(Colors::BG_GRADIENT_START));
-    grad.setColorAt(1, Colors::toQColor(Colors::BG_GRADIENT_END));
-    painter.fillRect(rect(), grad);
+    // Material Design 3: Solid surface color (no gradient)
+    painter.fillRect(rect(), Colors::toQColor(Colors::SURFACE));
 }
 
 void MainWindow::initUI() {
@@ -90,85 +89,102 @@ void MainWindow::initUI() {
     rootLayout->setContentsMargins(0, 0, 0, 0);
     rootLayout->setSpacing(0);
     
-    // ---- Sidebar ----
+    // ──── Material Navigation Rail (Sidebar) ────
     QWidget* sidebarWidget = new QWidget();
-    sidebarWidget->setFixedWidth(200);
+    sidebarWidget->setFixedWidth(220);
     sidebarWidget->setStyleSheet(QString(
         "background-color: %1; border-right: 1px solid %2;"
-    ).arg(Colors::GLASS_BG).arg(Colors::GLASS_BORDER));
+    ).arg(Colors::SURFACE_CONTAINER).arg(Colors::OUTLINE_VARIANT));
     
     QVBoxLayout* sidebarLayout = new QVBoxLayout(sidebarWidget);
-    sidebarLayout->setContentsMargins(15, 25, 15, 25);
-    sidebarLayout->setSpacing(15);
+    sidebarLayout->setContentsMargins(16, 28, 16, 20);
+    sidebarLayout->setSpacing(12);
     
+    // App header with Material icon
     QHBoxLayout* headerLayout = new QHBoxLayout();
-    QLabel* icon = new QLabel(QString::fromUtf8("⚡"));
-    icon->setStyleSheet(QString("font-size: 20px; color: %1; font-weight: bold; background: transparent; border: none;").arg(Colors::ACCENT_BLUE));
+    headerLayout->setSpacing(10);
+    
+    // App icon as a Material widget
+    QWidget* appIconWidget = new QWidget();
+    appIconWidget->setFixedSize(32, 32);
+    appIconWidget->setStyleSheet(QString(
+        "background: %1; border-radius: 8px; border: none;"
+    ).arg(Colors::PRIMARY_CONTAINER));
+    headerLayout->addWidget(appIconWidget);
+    
     QLabel* title = new QLabel("Lua Patcher");
-    title->setStyleSheet("font-size: 16px; font-weight: 700; color: #E2E8F0; background: transparent; border: none;");
-    headerLayout->addWidget(icon);
+    title->setStyleSheet(QString(
+        "font-size: 16px; font-weight: 700; color: %1; background: transparent; border: none; font-family: 'Roboto', 'Segoe UI';"
+    ).arg(Colors::ON_SURFACE));
     headerLayout->addWidget(title);
     headerLayout->addStretch();
     sidebarLayout->addLayout(headerLayout);
-    sidebarLayout->addSpacing(20);
+    sidebarLayout->addSpacing(16);
     
-    m_tabLua = new GlassButton(QString::fromUtf8("⬇"), " Lua Patcher", "", Colors::ACCENT_BLUE);
-    m_tabLua->setFixedHeight(40);
+    // Navigation tabs
+    m_tabLua = new GlassButton(MaterialIcons::Download, " Lua Patcher", "", Colors::PRIMARY);
+    m_tabLua->setFixedHeight(44);
     connect(m_tabLua, &QPushButton::clicked, this, [this](){ switchMode(AppMode::LuaPatcher); });
     sidebarLayout->addWidget(m_tabLua);
     
-    m_tabFix = new GlassButton(QString::fromUtf8("🔧"), " Fix Manager", "", Colors::ACCENT_PURPLE);
-    m_tabFix->setFixedHeight(40);
+    m_tabFix = new GlassButton(MaterialIcons::Build, " Fix Manager", "", Colors::SECONDARY);
+    m_tabFix->setFixedHeight(44);
     connect(m_tabFix, &QPushButton::clicked, this, [this](){ switchMode(AppMode::FixManager); });
     sidebarLayout->addWidget(m_tabFix);
 
-    m_tabLibrary = new GlassButton(QString::fromUtf8("📚"), " Library", "", Colors::ACCENT_GREEN);
-    m_tabLibrary->setFixedHeight(40);
+    m_tabLibrary = new GlassButton(MaterialIcons::Library, " Library", "", Colors::ACCENT_GREEN);
+    m_tabLibrary->setFixedHeight(44);
     connect(m_tabLibrary, &QPushButton::clicked, this, [this](){ switchMode(AppMode::Library); });
     sidebarLayout->addWidget(m_tabLibrary);
     
-    sidebarLayout->addSpacing(10);
+    sidebarLayout->addSpacing(8);
+    
+    // Material divider
     QFrame* line = new QFrame();
     line->setFrameShape(QFrame::HLine);
-    line->setStyleSheet("background: rgba(255, 255, 255, 0.1);");
+    line->setFixedHeight(1);
+    line->setStyleSheet(QString("background: %1; border: none;").arg(Colors::OUTLINE_VARIANT));
     sidebarLayout->addWidget(line);
-    sidebarLayout->addSpacing(10);
+    sidebarLayout->addSpacing(8);
     
     m_statusLabel = new QLabel("Initializing...");
-    m_statusLabel->setStyleSheet(QString("color: %1; font-size: 11px;").arg(Colors::TEXT_SECONDARY));
+    m_statusLabel->setStyleSheet(QString(
+        "color: %1; font-size: 11px; font-family: 'Roboto', 'Segoe UI'; background: transparent; border: none;"
+    ).arg(Colors::ON_SURFACE_VARIANT));
     m_statusLabel->setWordWrap(true);
     sidebarLayout->addWidget(m_statusLabel);
     sidebarLayout->addStretch();
     
-    m_btnAddToLibrary = new GlassButton(QString::fromUtf8("⚡"), "Add to Library", "Install / Generate Patch", Colors::ACCENT_GREEN);
-    m_btnAddToLibrary->setFixedHeight(50);
+    // Action buttons
+    m_btnAddToLibrary = new GlassButton(MaterialIcons::Add, "Add to Library", "Install / Generate Patch", Colors::ACCENT_GREEN);
+    m_btnAddToLibrary->setFixedHeight(52);
     m_btnAddToLibrary->setEnabled(false);
     connect(m_btnAddToLibrary, &QPushButton::clicked, this, &MainWindow::doAddGame);
     sidebarLayout->addWidget(m_btnAddToLibrary);
 
-    m_btnApplyFix = new GlassButton(QString::fromUtf8("🔧"), "Apply Fix", "Apply Fix Files", Colors::ACCENT_PURPLE);
-    m_btnApplyFix->setFixedHeight(50);
+    m_btnApplyFix = new GlassButton(MaterialIcons::Build, "Apply Fix", "Apply Fix Files", Colors::SECONDARY);
+    m_btnApplyFix->setFixedHeight(52);
     m_btnApplyFix->setEnabled(false);
     m_btnApplyFix->hide();
     connect(m_btnApplyFix, &QPushButton::clicked, this, &MainWindow::doApplyFix);
     sidebarLayout->addWidget(m_btnApplyFix);
 
-    m_btnRemove = new GlassButton(QString::fromUtf8("🗑"), "Remove", "Remove from Library", Colors::ACCENT_RED);
-    m_btnRemove->setFixedHeight(50);
+    m_btnRemove = new GlassButton(MaterialIcons::Delete, "Remove", "Remove from Library", Colors::ACCENT_RED);
+    m_btnRemove->setFixedHeight(52);
     m_btnRemove->setEnabled(false);
     m_btnRemove->hide();
     connect(m_btnRemove, &QPushButton::clicked, this, &MainWindow::doRemoveGame);
     sidebarLayout->addWidget(m_btnRemove);
     
-    sidebarLayout->addSpacing(10);
-    m_btnRestart = new GlassButton(QString::fromUtf8("↻"), "Restart Steam", "Apply Changes", Colors::ACCENT_PURPLE);
-    m_btnRestart->setFixedHeight(50);
+    sidebarLayout->addSpacing(8);
+    m_btnRestart = new GlassButton(MaterialIcons::RestartAlt, "Restart Steam", "Apply Changes", Colors::PRIMARY);
+    m_btnRestart->setFixedHeight(52);
     connect(m_btnRestart, &QPushButton::clicked, this, &MainWindow::doRestart);
     sidebarLayout->addWidget(m_btnRestart);
-    sidebarLayout->addSpacing(20);
+    sidebarLayout->addSpacing(16);
     
-    QLabel* infoLabel = new QLabel(QString("v%1<br>by <a href=\"https://github.com/sayedalimollah2602-prog\" style=\"color: %2; text-decoration: none;\">leVI</a> & <a href=\"https://github.com/raxnmint\" style=\"color: %2; text-decoration: none;\">raxnmint</a>").arg(Config::APP_VERSION).arg(Colors::TEXT_SECONDARY));
-    infoLabel->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold;").arg(Colors::TEXT_SECONDARY));
+    QLabel* infoLabel = new QLabel(QString("v%1<br>by <a href=\"https://github.com/sayedalimollah2602-prog\" style=\"color: %2; text-decoration: none;\">leVI</a> & <a href=\"https://github.com/raxnmint\" style=\"color: %2; text-decoration: none;\">raxnmint</a>").arg(Config::APP_VERSION).arg(Colors::ON_SURFACE_VARIANT));
+    infoLabel->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; font-family: 'Roboto', 'Segoe UI'; background: transparent; border: none;").arg(Colors::ON_SURFACE_VARIANT));
     infoLabel->setAlignment(Qt::AlignCenter);
     infoLabel->setTextFormat(Qt::RichText);
     infoLabel->setTextInteractionFlags(Qt::TextBrowserInteraction);
@@ -176,32 +192,42 @@ void MainWindow::initUI() {
     sidebarLayout->addWidget(infoLabel);
     rootLayout->addWidget(sidebarWidget);
 
-    // ---- Content Area ----
+    // ──── Content Area ────
     QWidget* contentWidget = new QWidget();
+    contentWidget->setStyleSheet(QString("background: %1;").arg(Colors::SURFACE));
     QVBoxLayout* mainLayout = new QVBoxLayout(contentWidget);
-    mainLayout->setContentsMargins(20, 20, 20, 20);
-    mainLayout->setSpacing(15);
+    mainLayout->setContentsMargins(24, 24, 24, 24);
+    mainLayout->setSpacing(16);
     
-    // Search bar
+    // Material search bar (outlined text field style)
     QHBoxLayout* searchLayout = new QHBoxLayout();
-    searchLayout->setSpacing(8);
+    searchLayout->setSpacing(10);
     m_searchInput = new QLineEdit();
-    m_searchInput->setPlaceholderText("Find a game...");
+    m_searchInput->setPlaceholderText("Search games...");
+    m_searchInput->setMinimumHeight(44);
     connect(m_searchInput, &QLineEdit::textChanged, this, &MainWindow::onSearchChanged);
+    
+    // Subtle shadow for elevation
     QGraphicsDropShadowEffect* shadow = new QGraphicsDropShadowEffect(m_searchInput);
-    shadow->setBlurRadius(20); shadow->setColor(QColor(0, 0, 0, 80)); shadow->setOffset(0, 4);
+    shadow->setBlurRadius(12);
+    shadow->setColor(QColor(0, 0, 0, 40));
+    shadow->setOffset(0, 2);
     m_searchInput->setGraphicsEffect(shadow);
     searchLayout->addWidget(m_searchInput);
     
-    QPushButton* refreshBtn = new QPushButton(QString::fromUtf8("↻"));
-    refreshBtn->setFixedSize(36, 36);
+    // Refresh button - Material icon button
+    QPushButton* refreshBtn = new QPushButton();
+    refreshBtn->setFixedSize(44, 44);
     refreshBtn->setCursor(Qt::PointingHandCursor);
     refreshBtn->setStyleSheet(QString(
-        "QPushButton { background: %1; border: 1px solid %2; border-radius: 8px; font-size: 16px; font-weight: bold; color: %3; }"
-        "QPushButton:hover { background: %4; border-color: %5; }"
-        "QPushButton:pressed { background: %6; }"
-    ).arg(Colors::GLASS_BG).arg(Colors::GLASS_BORDER).arg(Colors::TEXT_PRIMARY)
-     .arg(Colors::GLASS_HOVER).arg(Colors::ACCENT_BLUE).arg(Colors::GLASS_BG));
+        "QPushButton { background: %1; border: 1px solid %2; border-radius: 22px; }"
+        "QPushButton:hover { background: %3; border-color: %4; }"
+        "QPushButton:pressed { background: %5; }"
+    ).arg(Colors::SURFACE_CONTAINER_HIGH).arg(Colors::OUTLINE_VARIANT)
+     .arg(Colors::SURFACE_CONTAINER_HIGHEST).arg(Colors::PRIMARY)
+     .arg(Colors::SURFACE_CONTAINER));
+    
+    // Custom paint for refresh icon on button
     connect(refreshBtn, &QPushButton::clicked, this, [this]() {
         if (m_searchInput->text().trimmed().isEmpty()) startSync(); else doSearch();
     });
@@ -218,23 +244,24 @@ void MainWindow::initUI() {
     layLoading->addWidget(m_spinner);
     m_stack->addWidget(pageLoading); // index 0
     
-    // ---- GRID PAGE (replaces QListWidget) ----
+    // Grid page
     m_scrollArea = new QScrollArea();
     m_scrollArea->setWidgetResizable(true);
     m_scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_scrollArea->setFrameShape(QFrame::NoFrame);
-    m_scrollArea->setStyleSheet(
+    m_scrollArea->setStyleSheet(QString(
         "QScrollArea { background: transparent; border: none; }"
-        "QScrollBar:vertical { background: rgba(0,0,0,40); width: 8px; border-radius: 4px; }"
-        "QScrollBar::handle:vertical { background: rgba(255,255,255,60); border-radius: 4px; min-height: 30px; }"
+        "QScrollBar:vertical { background: %1; width: 8px; border-radius: 4px; }"
+        "QScrollBar::handle:vertical { background: %2; border-radius: 4px; min-height: 30px; }"
+        "QScrollBar::handle:vertical:hover { background: %3; }"
         "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
-    );
+    ).arg(Colors::SURFACE).arg(Colors::OUTLINE_VARIANT).arg(Colors::OUTLINE));
     
     m_gridContainer = new QWidget();
     m_gridContainer->setStyleSheet("background: transparent;");
     m_gridLayout = new QGridLayout(m_gridContainer);
     m_gridLayout->setContentsMargins(4, 4, 4, 4);
-    m_gridLayout->setSpacing(12);
+    m_gridLayout->setSpacing(14);
     
     m_scrollArea->setWidget(m_gridContainer);
     connect(m_scrollArea->verticalScrollBar(), &QScrollBar::valueChanged,
@@ -243,13 +270,14 @@ void MainWindow::initUI() {
     m_stack->addWidget(m_scrollArea); // index 1
     mainLayout->addWidget(m_stack);
     
+    // Progress bar - Material linear progress
     m_progress = new QProgressBar();
     m_progress->setFixedHeight(4);
     m_progress->setTextVisible(false);
     m_progress->setStyleSheet(QString(
         "QProgressBar { background: %1; border-radius: 2px; }"
         "QProgressBar::chunk { background: %2; border-radius: 2px; }"
-    ).arg(Colors::GLASS_BG).arg(Colors::ACCENT_GREEN));
+    ).arg(Colors::SURFACE_VARIANT).arg(Colors::PRIMARY));
     m_progress->hide();
     mainLayout->addWidget(m_progress);
     
@@ -278,7 +306,6 @@ void MainWindow::displayRandomGames() {
 
     if (m_supportedGames.isEmpty()) return;
 
-    // Copy and shuffle to pick random games
     QList<GameInfo> shuffled = m_supportedGames;
     auto *rng = QRandomGenerator::global();
     for (int i = shuffled.size() - 1; i > 0; --i) {
@@ -355,7 +382,6 @@ void MainWindow::displayLibrary() {
         QString name = "Unknown Game";
         bool hasFix = false;
         
-        // Try to find name in supported games
         for (const auto& g : m_supportedGames) {
             if (g.id == appId) {
                 name = g.name;
@@ -369,7 +395,7 @@ void MainWindow::displayLibrary() {
         QMap<QString, QString> cd;
         cd["name"] = name;
         cd["appid"] = appId;
-        cd["supported"] = "true"; // Installed means supported effectively
+        cd["supported"] = "true";
         cd["hasFix"] = hasFix ? "true" : "false";
 
         GameCard* card = new GameCard(m_gridContainer);
@@ -455,25 +481,12 @@ void MainWindow::doSearch() {
     m_currentSearchId++;
     m_statusLabel->setText("Searching...");
     
-    // Local search
     QJsonArray localResults;
     int count = 0;
     for (const auto& game : m_supportedGames) {
         if (count >= 100) break;
         if (m_currentMode == AppMode::FixManager && !game.hasFix) continue;
-        // In Library mode with active search, we only want to search within installed games? 
-        // Or global search? Let's assume global search for now, but strictly speaking 
-        // if user is in Library tab they might expect to search ONLY library. 
-        // The current implementation of doSearch creates localResults from ALL supported games.
-        // We should filter if mode is Library?
-        // Actually, let's keep it consistent: doSearch searches everything. 
-        // But wait, if I'm in Library tab and search "Cyberpunk", if I don't have it installed, 
-        // should it show up? Probably not if it's "Library" search.
-        // However, the current doSearch logic is "Global Search" effectively.
-        // Let's leave doSearch as is for now (searching all supported games), or modify it?
-        // Modifying doSearch to respect Library mode:
         if (m_currentMode == AppMode::Library) {
-             // Logic for library search if needed
         }
         
         if (game.name.contains(query, Qt::CaseInsensitive) || game.id == query) {
@@ -529,7 +542,6 @@ void MainWindow::onSearchFinished(QNetworkReply* reply) {
     if (reply == m_activeReply) m_activeReply = nullptr;
     if (reply->error() == QNetworkReply::OperationCanceledError) return;
     
-    // Skip non-search replies (thumbnails, name fetches, etc.)
     QString type = reply->property("type").toString();
     if (type.isEmpty()) return;
     
@@ -586,7 +598,6 @@ void MainWindow::onSearchFinished(QNetworkReply* reply) {
     m_spinner->stop();
     m_stack->setCurrentIndex(1);
     
-    // Build map of existing cards for merge
     QMap<QString, GameCard*> cardMap;
     for (GameCard* c : m_gameCards) cardMap.insert(c->appId(), c);
     
@@ -658,7 +669,6 @@ void MainWindow::displayResults(const QJsonArray& items) {
 
     if (items.isEmpty()) return;
 
-    // Safety cap to prevent UI freeze
     QJsonArray safeItems = items;
     if (safeItems.size() > 120) {
         while (safeItems.size() > 120) safeItems.removeAt(safeItems.size() - 1);
@@ -714,7 +724,7 @@ void MainWindow::displayResults(const QJsonArray& items) {
     if (!m_pendingNameFetchIds.isEmpty()) startBatchNameFetch();
 }
 
-// ---- Card clicked (replaces onGameSelected) ----
+// ---- Card clicked ----
 void MainWindow::onCardClicked(GameCard* card) {
     if (m_selectedCard) m_selectedCard->setSelected(false);
     
@@ -741,7 +751,7 @@ void MainWindow::onCardClicked(GameCard* card) {
             m_btnAddToLibrary->setColor(Colors::ACCENT_GREEN);
         } else {
             m_btnAddToLibrary->setDescription(QString("Generate patch for %1").arg(data["name"]));
-            m_btnAddToLibrary->setColor(Colors::ACCENT_BLUE);
+            m_btnAddToLibrary->setColor(Colors::PRIMARY);
         }
     } else if (m_currentMode == AppMode::FixManager) {
         if (hasFix) {
@@ -757,11 +767,9 @@ void MainWindow::onCardClicked(GameCard* card) {
     m_statusLabel->setText(QString("Selected: %1").arg(data["name"]));
 }
 
-// ---- Patch / Generate / Restart / Fix ----
 // ---- Patch / Generate / Restart / Fix / Remove ----
 void MainWindow::doAddGame() {
     if (m_selectedGame.isEmpty()) return;
-    // Only works in LuaPatcher mode really, or if called directly
     bool isSupported = (m_selectedGame["supported"] == "true");
     if (isSupported) runPatchLogic(); else runGenerateLogic();
 }
@@ -788,7 +796,7 @@ void MainWindow::doRemoveGame() {
     
     if (deleted) {
         m_statusLabel->setText(QString("Removed patch for %1").arg(name));
-        displayLibrary(); // Refresh view
+        displayLibrary();
     } else {
         QMessageBox::warning(this, "Error", "Failed to remove patch file. It may not exist or is in use.");
     }
@@ -946,7 +954,6 @@ void MainWindow::switchMode(AppMode mode) {
     m_currentMode = mode;
     updateModeUI();
     
-    // Toggle button visibility
     m_btnAddToLibrary->hide();
     m_btnApplyFix->hide();
     m_btnRemove->hide();

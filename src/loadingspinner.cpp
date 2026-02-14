@@ -36,13 +36,13 @@ void LoadingSpinner::paintEvent(QPaintEvent* event) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
     
-    QPen pen(Colors::toQColor(Colors::ACCENT_BLUE), 4);
+    // Material Design 3 circular progress indicator
+    QPen pen(Colors::toQColor(Colors::PRIMARY), 3);
     pen.setCapStyle(Qt::RoundCap);
     painter.setPen(pen);
     
-    // Draw arc
-    QRect rect(10, 10, 40, 40);
+    QRect spinRect(10, 10, 40, 40);
     int startAngle = -m_angle * 16;
     int spanAngle = 270 * 16;
-    painter.drawArc(rect, startAngle, spanAngle);
+    painter.drawArc(spinRect, startAngle, spanAngle);
 }
