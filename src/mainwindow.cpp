@@ -557,8 +557,17 @@ void MainWindow::displayLibrary() {
 
 // ---- Sync ----
 void MainWindow::startSync() {
-    m_stack->setCurrentIndex(0);
-    m_spinner->start();
+    clearGameCards();
+    
+    for (int i = 0; i < 12; ++i) {
+        GameCard* card = new GameCard(m_gridContainer);
+        card->setSkeleton(true);
+        m_gridLayout->addWidget(card, i / 3, i % 3);
+        m_gameCards.append(card);
+    }
+    
+    m_stack->setCurrentIndex(1);
+    m_spinner->stop();
     m_syncWorker = new IndexDownloadWorker(this);
     connect(m_syncWorker, &IndexDownloadWorker::finished, this, &MainWindow::onSyncDone);
     connect(m_syncWorker, &IndexDownloadWorker::progress, m_statusLabel, &QLabel::setText);

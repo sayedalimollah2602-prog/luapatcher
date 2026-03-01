@@ -50,6 +50,45 @@ QString GameCard::appId() const {
     return m_data.value("appid");
 }
 
+void GameCard::setSkeleton(bool skeleton) {
+    if (m_isSkeleton == skeleton) return;
+    m_isSkeleton = skeleton;
+    if (m_isSkeleton) {
+        if (!m_skeletonTimer) {
+            m_skeletonTimer = new QTimer(this);
+            connect(m_skeletonTimer, &QTimer::timeout, this, &GameCard::updateSkeletonPulse);
+        }
+        m_skeletonPulse = 0.0;
+        m_pulseIncreasing = true;
+        m_skeletonTimer->start(30); // ~33 fps
+    } else {
+        if (m_skeletonTimer) m_skeletonTimer->stop();
+        m_skeletonPulse = 0.0;
+    }
+    update();
+}
+
+bool GameCard::isSkeleton() const {
+    return m_isSkeleton;
+}
+
+void GameCard::updateSkeletonPulse() {
+    if (m_pulseIncreasing) {
+        m_skeletonPulse += 0.05;
+        if (m_skeletonPulse >= 1.0) {
+            m_skeletonPulse = 1.0;
+            m_pulseIncreasing = false;
+        }
+    } else {
+        m_skeletonPulse -= 0.05;
+        if (m_skeletonPulse <= 0.0) {
+            m_skeletonPulse = 0.0;
+            m_pulseIncreasing = true;
+        }
+    }
+    update();
+}
+
 void GameCard::paintEvent(QPaintEvent* event) {
     Q_UNUSED(event);
 
@@ -86,6 +125,62 @@ void GameCard::paintEvent(QPaintEvent* event) {
     QPainterPath clipPath;
     clipPath.addRoundedRect(cardRect, radius, radius);
     painter.setClipPath(clipPath);
+
+    if (m_isSkeleton) {
+        // Base skeleton background
+        QColor baseColor = Colors::toQColor(Colors::SURFACE_CONTAINER_HIGH);
+        // Blend dynamically with a slightly lighter color for the pulse
+        QColor pulseColor = Colors::toQColor(Colors::SURFACE_CONTAINER_HIGHEST);
+        
+        int r = baseColor.red() + (pulseColor.red() - baseColor.red()) * m_skeletonPulse;
+        int g = baseColor.green() + (pulseColor.green() - baseColor.green()) * m_skeletonPulse;
+        int b = baseColor.blue() + (pulseColor.blue() - baseColor.blue()) * m_skeletonPulse;
+        QColor activeColor(r, g, b);
+
+        painter.fillRect(cardRect.toRect(), activeColor);
+
+        // Draw shimmer overlay
+        QLinearGradient shimmer(cardRect.topLeft(), cardRect.bottomRight());
+        shimmer.setColorAt(0, QColor(255, 255, 255, 0));
+        shimmer.setColorAt(0.5, QColor(255, 255, 255, 10 + 15 * m_skeletonPulse));
+        shimmer.setColorAt(1, QColor(255, 255, 255, 0));
+        painter.fillRect(cardRect.toRect(), shimmer);
+
+        // Draw skeleton placeholder for thumbnail
+        QRectF thumbPlaceholder(cardRect.left(), cardRect.top(), cardRect.width(), cardRect.height() - 62);
+        QColor thumbColor = Colors::toQColor(Colors::SURFACE_VARIANT);
+        thumbColor.setAlphaF(0.4 + 0.3 * m_skeletonPulse);
+        painter.fillRect(thumbPlaceholder.toRect(), thumbColor);
+
+        // Draw skeleton placeholders for text in bottom area
+        int infoHeight = 62;
+        QRectF infoRect(cardRect.left(), cardRect.bottom() - infoHeight, cardRect.width(), infoHeight);
+        QColor infoColor = Colors::toQColor(Colors::SURFACE_CONTAINER_HIGHEST);
+        infoColor.setAlphaF(0.5 + 0.3 * m_skeletonPulse);
+        
+        // Name placeholder
+        QRectF namePlaceholder(infoRect.left() + 12, infoRect.top() + 14, infoRect.width() * 0.7, 14);
+        QPainterPath namePath;
+        namePath.addRoundedRect(namePlaceholder, 6, 6);
+        painter.fillPath(namePath, infoColor);
+
+        // ID placeholder
+        QRectF idPlaceholder(infoRect.left() + 12, infoRect.top() + 36, infoRect.width() * 0.4, 10);
+        QPainterPath idPath;
+        idPath.addRoundedRect(idPlaceholder, 5, 5);
+        painter.fillPath(idPath, infoColor);
+
+        // Reset clip for border drawing
+        painter.setClipRect(rect());
+
+        // Resting outline variant
+        QPen borderPen(Colors::toQColor(Colors::OUTLINE_VARIANT), 1);
+        painter.setPen(borderPen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRoundedRect(cardRect, radius, radius);
+
+        return; // Skip drawing real content
+    }
 
     if (m_hasThumbnail) {
         // Stretch thumbnail to fill card
@@ -221,17 +316,20 @@ void GameCard::paintEvent(QPaintEvent* event) {
 
 void GameCard::mousePressEvent(QMouseEvent* event) {
     Q_UNUSED(event);
+    if (m_isSkeleton) return;
     emit clicked(this);
 }
 
 void GameCard::enterEvent(QEnterEvent* event) {
     Q_UNUSED(event);
+    if (m_isSkeleton) return;
     m_hovered = true;
     update();
 }
 
 void GameCard::leaveEvent(QEvent* event) {
     Q_UNUSED(event);
+    if (m_isSkeleton) return;
     m_hovered = false;
     update();
 }

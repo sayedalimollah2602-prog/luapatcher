@@ -3,8 +3,8 @@
 
 #include <QWidget>
 #include <QPixmap>
-#include <QString>
 #include <QMap>
+#include <QTimer>
 
 class GameCard : public QWidget {
     Q_OBJECT
@@ -23,6 +23,9 @@ public:
 
     QString appId() const;
 
+    void setSkeleton(bool skeleton);
+    bool isSkeleton() const;
+
 signals:
     void clicked(GameCard* card);
 
@@ -32,12 +35,19 @@ protected:
     void enterEvent(QEnterEvent* event) override;
     void leaveEvent(QEvent* event) override;
 
+private slots:
+    void updateSkeletonPulse();
+
 private:
     QMap<QString, QString> m_data;
     QPixmap m_thumbnail;
     bool m_hasThumbnail = false;
     bool m_selected = false;
     bool m_hovered = false;
+    bool m_isSkeleton = false;
+    QTimer* m_skeletonTimer = nullptr;
+    qreal m_skeletonPulse = 0.0;
+    bool m_pulseIncreasing = true;
 };
 
 #endif // GAMECARD_H
