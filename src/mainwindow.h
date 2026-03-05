@@ -47,6 +47,9 @@ protected:
     void paintEvent(QPaintEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dropEvent(QDropEvent* event) override;
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
 
 private slots:
     void onSyncDone(QList<GameInfo> games);
@@ -135,6 +138,9 @@ private:
     // Thumbnail cache
     QMap<QString, QPixmap> m_thumbnailCache;
     QSet<QString> m_activeThumbnailDownloads;
+    // Window Dragging
+    bool m_dragging = false;
+    QPoint m_dragPosition;
 };
 
 #endif // MAINWINDOW_H

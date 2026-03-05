@@ -12,6 +12,17 @@
 #include "utils/paths.h"
 #include "config.h"
 
+#ifdef Q_OS_WIN
+#include <dwmapi.h>
+#ifndef DWMWA_SYSTEMBACKDROP_TYPE
+#define DWMWA_SYSTEMBACKDROP_TYPE 38
+#endif
+#ifndef DWMSBT_MAINWINDOW
+#define DWMSBT_MAINWINDOW 2
+#define DWMSBT_TRANSIENTWINDOW 3
+#endif
+#endif
+
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QPainter>
@@ -105,6 +116,16 @@ MainWindow::MainWindow(QWidget* parent)
         setWindowIcon(QIcon(iconPath));
     }
     
+#ifdef Q_OS_WIN
+    HWND hwnd = (HWND)this->winId();
+    int backdrop = DWMSBT_TRANSIENTWINDOW; // Acrylic frosted glass
+    DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
+#endif
+
+    // Frameless glass window
+    setWindowFlags(Qt::FramelessWindowHint | Qt::Window);
+    setAttribute(Qt::WA_TranslucentBackground);
+
     initUI();
     
     m_debounceTimer = new QTimer(this);
@@ -129,7 +150,38 @@ MainWindow::~MainWindow() {
 void MainWindow::paintEvent(QPaintEvent* event) {
     Q_UNUSED(event);
     QPainter painter(this);
+    // Use the semi-transparent surface color to let Mica/Acrylic bleed through
     painter.fillRect(rect(), Colors::toQColor(Colors::SURFACE));
+}
+
+// ── Window Dragging Implementation ──
+void MainWindow::mousePressEvent(QMouseEvent *event) {
+    if (event->button() == Qt::LeftButton) {
+        // Only allow drag from the top header area (approx 60px)
+        if (event->pos().y() <= 60) {
+            m_dragging = true;
+            m_dragPosition = event->globalPosition().toPoint() - frameGeometry().topLeft();
+            event->accept();
+            return;
+        }
+    }
+    QMainWindow::mousePressEvent(event);
+}
+
+void MainWindow::mouseMoveEvent(QMouseEvent *event) {
+    if (event->buttons() & Qt::LeftButton && m_dragging) {
+        move(event->globalPosition().toPoint() - m_dragPosition);
+        event->accept();
+        return;
+    }
+    QMainWindow::mouseMoveEvent(event);
+}
+
+void MainWindow::mouseReleaseEvent(QMouseEvent *event) {
+    if (event->button() == Qt::LeftButton) {
+        m_dragging = false;
+    }
+    QMainWindow::mouseReleaseEvent(event);
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent* event) {
@@ -227,6 +279,16 @@ void MainWindow::initUI() {
     ).arg(Colors::ON_SURFACE));
     headerLayout->addWidget(title);
     headerLayout->addStretch();
+    
+    // Custom window controls since we are frameless
+    MaterialIconButton* closeBtn = new MaterialIconButton(
+        MaterialIcons::Delete, Colors::toQColor(Colors::ON_SURFACE), 28);
+    // Hack: re-use an icon visually close to an X or window close if we don't have a close icon.
+    // For now, let's use a simple distinct color and click handler.
+    closeBtn->setToolTip("Close");
+    connect(closeBtn, &QPushButton::clicked, this, &QMainWindow::close);
+    headerLayout->addWidget(closeBtn);
+    
     sidebarLayout->addLayout(headerLayout);
     sidebarLayout->addSpacing(20);
     

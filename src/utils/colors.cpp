@@ -1,17 +1,17 @@
 #include "colors.h"
 
-// Pure Black Theme - Surface colors
-const QString Colors::SURFACE              = "#000000";
-const QString Colors::SURFACE_DIM          = "#000000";
-const QString Colors::SURFACE_BRIGHT       = "#1A1A1A";
-const QString Colors::SURFACE_CONTAINER    = "#0A0A0A";
-const QString Colors::SURFACE_CONTAINER_HIGH    = "#141414";
-const QString Colors::SURFACE_CONTAINER_HIGHEST = "#1E1E1E";
-const QString Colors::SURFACE_VARIANT      = "#2A2A2A";
+// Pure Black Theme - Surface colors (Updated for Glassmorphism #AARRGGBB)
+const QString Colors::SURFACE              = "#40000000"; // 25% black
+const QString Colors::SURFACE_DIM          = "#20000000"; // 12% black
+const QString Colors::SURFACE_BRIGHT       = "#301A1A1A";
+const QString Colors::SURFACE_CONTAINER    = "#500A0A0A"; 
+const QString Colors::SURFACE_CONTAINER_HIGH    = "#60141414";
+const QString Colors::SURFACE_CONTAINER_HIGHEST = "#701E1E1E";
+const QString Colors::SURFACE_VARIANT      = "#502A2A2A";
 const QString Colors::ON_SURFACE           = "#E6E1E5";
 const QString Colors::ON_SURFACE_VARIANT   = "#CAC4D0";
-const QString Colors::OUTLINE              = "#6E6E6E";
-const QString Colors::OUTLINE_VARIANT      = "#2A2A2A";
+const QString Colors::OUTLINE              = "#706E6E6E";
+const QString Colors::OUTLINE_VARIANT      = "#402A2A2A";
 
 // Primary (Purple) - unchanged
 const QString Colors::PRIMARY              = "#D0BCFF";

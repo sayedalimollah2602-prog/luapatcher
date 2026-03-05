@@ -192,8 +192,8 @@ void GameCard::paintEvent(QPaintEvent* event) {
 
         // Subtle tonal overlay
         QRadialGradient glow(cardRect.center(), cardRect.height() * 0.6);
-        glow.setColorAt(0, QColor(208, 188, 255, 10)); // Primary tint
-        glow.setColorAt(1, QColor(0, 0, 0, 0));
+        glow.setColorAt(0, QColor(255, 255, 255, 15)); // Soft bright tint for glass
+        glow.setColorAt(1, QColor(255, 255, 255, 0));
         painter.fillRect(cardRect.toRect(), glow);
 
         // Gamepad icon placeholder
@@ -218,12 +218,16 @@ void GameCard::paintEvent(QPaintEvent* event) {
         infoGrad.setColorAt(0, QColor(0, 0, 0, 0));
         infoGrad.setColorAt(0.3, QColor(0, 0, 0, 180));
         infoGrad.setColorAt(1, QColor(0, 0, 0, 240));
+        painter.fillRect(infoRect.toRect(), infoGrad);
     } else {
-        infoGrad.setColorAt(0, QColor(0, 0, 0, 0));
-        infoGrad.setColorAt(0.3, QColor(0, 0, 0, 120));
-        infoGrad.setColorAt(1, QColor(0, 0, 0, 180));
+        // Flat frosted bottom
+        QColor frostedBottom = Colors::toQColor(Colors::SURFACE_CONTAINER_HIGHEST);
+        frostedBottom.setAlpha(180);
+        painter.fillRect(infoRect.toRect(), frostedBottom);
+        // Subtle top border relative to the bottom section
+        painter.setPen(QPen(QColor(255,255,255,20), 1));
+        painter.drawLine(infoRect.topLeft(), infoRect.topRight());
     }
-    painter.fillRect(infoRect.toRect(), infoGrad);
 
     // Game name
     QString name = m_data.value("name", "Unknown");

@@ -95,6 +95,7 @@ target_link_libraries(SteamLuaPatcher PRIVATE
     Qt6::Gui
     Qt6::Widgets
     Qt6::Network
+    dwmapi
 )
 
 # Static build configuration
