@@ -1,4 +1,5 @@
 const express = require('express');
+const compression = require('compression');
 const serverless = require('serverless-http');
 const path = require('path');
 const fs = require('fs');
@@ -9,6 +10,7 @@ const auth = require('basic-auth');
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
 const app = express();
+app.use(compression());
 
 const ACCESS_TOKEN = process.env.SERVER_ACCESS_TOKEN;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
@@ -50,7 +52,11 @@ app.get('/admin', (req, res) => {
     try {
         if (fs.existsSync(INDEX_JSON)) {
             const data = JSON.parse(fs.readFileSync(INDEX_JSON, 'utf8'));
-            const games = data.games || [];
+            const allGames = data.games || [];
+            
+            // Limit to 2000 items to prevent the browser from crashing and the payload from being too large
+            const games = allGames.slice(0, 2000);
+            const truncated = allGames.length > 2000;
             
             const rows = games.map(game => {
                 const gameId = game.id || 'N/A';
@@ -58,6 +64,11 @@ app.get('/admin', (req, res) => {
                 const hasFix = game.has_fix ? '✓' : '';
                 return `<tr><td class='id-col'>${gameId}</td><td class='name-col'>${gameName}</td><td class='fix-col'>${hasFix}</td></tr>`;
             });
+            
+            if (truncated) {
+                rows.push(`<tr><td colspan='3'>... and ${allGames.length - 2000} more games (truncated for performance)</td></tr>`);
+            }
+            
             gamesListHtml = rows.join('\n');
         } else {
             gamesListHtml = "<tr><td colspan='3'>games_index.json not found</td></tr>";
