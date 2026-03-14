@@ -90,7 +90,7 @@ def save_games_index(app_map):
     output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'games_index.json')
     try:
         with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(index_data, f, ensure_ascii=False, indent=2)
+            json.dump(index_data, f, ensure_ascii=False, separators=(',', ':'))
         print(f"Generated games_index.json with {len(games_list)} supported games.")
         return output_path
     except Exception as e:
