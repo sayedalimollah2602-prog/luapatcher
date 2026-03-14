@@ -8,7 +8,7 @@
 
 namespace Config {
     const QString APP_VERSION = "1.3.6";
-    const QString WEBSERVER_BASE_URL = "https://webserver-ecru.vercel.app";
+    const QString WEBSERVER_BASE_URL = "https://webserver2.netlify.app";
     
     // Server access token - check local file first, then macro
     inline QString getAccessToken() {
