@@ -1,0 +1,71 @@
+name: Update Games and Index
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 1 * *' # At 00:00 on day-of-month 1.
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  update-games:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Free additional disk space
+        run: |
+          sudo apt purge -yq $(
+            dpkg -l |
+              grep '^ii' |
+              awk '{ print $2 }' |
+              grep -P '(mecab|linux-azure-tools-|aspnetcore|liblldb-|netstandard-|clang-tidy|clang-format|gfortran-|mysql-|google-cloud-cli|postgresql-|cabal-|dotnet-|ghc-|mongodb-|libmono|llvm-16|llvm-17)'
+          ) || true
+          sudo apt purge -yq \
+            snapd kubectl podman ruby3.2-doc mercurial-common git-lfs \
+            skopeo buildah vim python3-botocore azure-cli powershell \
+            shellcheck firefox google-chrome-stable microsoft-edge-stable || true
+          sudo apt autoremove -yq
+          sudo apt clean
+
+      - name: Install Git
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git Performance
+        run: |
+          git config --global pack.threads 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run Manifest Grabber (Timeout Safe)
+        id: manifest
+        continue-on-error: true
+        run: |
+          # Run for up to 350 minutes (5h 50m) to leave time for commit/push
+          timeout 350m python mainfest.py --cleanup -v || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
+
+      - name: Commit and push changes
+        if: always() # Run even if the python script timed out
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update game manifests [skip ci]"
+          file_pattern: games/*.lua
+          branch: main
+
+      - name: Trigger Index Generation
+        if: always() # Run even if previous steps failed/timed out, as long as we have something
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run generate-index.yml

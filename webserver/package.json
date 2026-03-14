@@ -1,0 +1,27 @@
+{
+  "name": "webserver2",
+  "version": "1.0.0",
+  "description": "Flask-based file server for Steam Lua patches. This serves as the backend for the Steam Lua Patcher desktop application.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/devsayed2602/webserver2.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/devsayed2602/webserver2/issues"
+  },
+  "homepage": "https://github.com/devsayed2602/webserver2#readme",
+  "dependencies": {
+    "basic-auth": "^2.0.1",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "serverless-http": "^4.0.0"
+  }
+}

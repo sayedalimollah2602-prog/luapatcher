@@ -14,7 +14,7 @@ load_dotenv()
 app = Flask(__name__)
 
 # Security configuration
-# These should be set as environment variables in Vercel/Production or in a .env file locally
+# These should be set as environment variables in Vercel/Netlify/Production or in a .env file locally
 ACCESS_TOKEN = os.environ.get('SERVER_ACCESS_TOKEN')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD')
 

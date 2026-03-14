@@ -11,6 +11,7 @@ permissions:
 
 env:
   QT_VERSION: '6.6.0'
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:

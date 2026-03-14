@@ -1,0 +1,6 @@
+# Ignore Node.js files on Vercel so it strictly builds the Python Flask app
+package.json
+package-lock.json
+node_modules/
+netlify/
+netlify.toml

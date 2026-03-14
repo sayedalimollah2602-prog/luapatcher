@@ -1,0 +1,21 @@
+# Environment variables (secrets)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+
+# Node
+node_modules/
+
+# Netlify
+.netlify/
+
+# IDE
+.vscode/
+.idea/
